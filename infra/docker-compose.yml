@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: nda_redline
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - nda_network
+
+  api:
+    build:
+      context: ../api
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/nda_redline
+      - JWT_SECRET=your-secret-key-change-in-production
+      - CORS_ORIGIN=http://localhost:3000
+    volumes:
+      - ../api:/app
+      - uploads:/app/uploads
+      - outputs:/app/outputs
+    ports:
+      - "5001:5001"
+    depends_on:
+      - postgres
+    networks:
+      - nda_network
+    command: python run.py
+
+  web:
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+    environment:
+      - API_BASE_URL=http://localhost:5001
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    networks:
+      - nda_network
+    command: npm run dev
+
+volumes:
+  postgres_data:
+  uploads:
+  outputs:
+
+networks:
+  nda_network:
+    driver: bridge

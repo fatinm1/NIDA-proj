@@ -1,0 +1,108 @@
+from flask import Blueprint, request, jsonify, make_response
+from app.models import User
+from app import db
+import jwt
+import datetime
+from functools import wraps
+
+auth_bp = Blueprint('auth', __name__)
+
+def create_tokens(user_id):
+    access_token = jwt.encode(
+        {'user_id': user_id, 'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)},
+        'your-secret-key',  # Use config in production
+        algorithm='HS256'
+    )
+    refresh_token = jwt.encode(
+        {'user_id': user_id, 'exp': datetime.datetime.utcnow() + datetime.timedelta(days=30)},
+        'your-secret-key',  # Use config in production
+        algorithm='HS256'
+    )
+    return access_token, refresh_token
+
+@auth_bp.route('/register', methods=['POST'])
+def register():
+    data = request.get_json()
+    
+    if not data or not data.get('email') or not data.get('password'):
+        return jsonify({'error': 'Email and password required'}), 400
+    
+    if User.query.filter_by(email=data['email']).first():
+        return jsonify({'error': 'Email already registered'}), 409
+    
+    user = User(email=data['email'])
+    user.set_password(data['password'])
+    
+    db.session.add(user)
+    db.session.commit()
+    
+    access_token, refresh_token = create_tokens(user.id)
+    
+    response = make_response(jsonify({'message': 'User registered successfully'}))
+    response.set_cookie('access_token', access_token, httponly=True, secure=False, samesite='Lax')
+    response.set_cookie('refresh_token', refresh_token, httponly=True, secure=False, samesite='Lax')
+    
+    return response, 201
+
+@auth_bp.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    
+    if not data or not data.get('email') or not data.get('password'):
+        return jsonify({'error': 'Email and password required'}), 400
+    
+    user = User.query.filter_by(email=data['email']).first()
+    
+    if not user or not user.check_password(data['password']):
+        return jsonify({'error': 'Invalid credentials'}), 401
+    
+    access_token, refresh_token = create_tokens(user.id)
+    
+    response = make_response(jsonify({'message': 'Login successful', 'user': user.to_dict()}))
+    response.set_cookie('access_token', access_token, httponly=True, secure=False, samesite='Lax')
+    response.set_cookie('refresh_token', refresh_token, httponly=True, secure=False, samesite='Lax')
+    
+    return response
+
+@auth_bp.route('/refresh', methods=['POST'])
+def refresh():
+    refresh_token = request.cookies.get('refresh_token')
+    
+    if not refresh_token:
+        return jsonify({'error': 'Refresh token required'}), 401
+    
+    try:
+        payload = jwt.decode(refresh_token, 'your-secret-key', algorithms=['HS256'])
+        user_id = payload['user_id']
+        
+        access_token, new_refresh_token = create_tokens(user_id)
+        
+        response = make_response(jsonify({'message': 'Token refreshed'}))
+        response.set_cookie('access_token', access_token, httponly=True, secure=False, samesite='Lax')
+        response.set_cookie('refresh_token', new_refresh_token, httponly=True, secure=False, samesite='Lax')
+        
+        return response
+    except jwt.ExpiredSignatureError:
+        return jsonify({'error': 'Refresh token expired'}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({'error': 'Invalid refresh token'}), 401
+
+@auth_bp.route('/me', methods=['GET'])
+def me():
+    access_token = request.cookies.get('access_token')
+    
+    if not access_token:
+        return jsonify({'error': 'Access token required'}), 401
+    
+    try:
+        payload = jwt.decode(access_token, 'your-secret-key', algorithms=['HS256'])
+        user = User.query.get(payload['user_id'])
+        
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        return jsonify({'user': user.to_dict()})
+    except jwt.ExpiredSignatureError:
+        return jsonify({'error': 'Access token expired'}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({'error': 'Invalid access token'}), 401
