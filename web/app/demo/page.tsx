@@ -1,9 +1,34 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Upload, FileText, Settings, Download, CheckCircle, Zap, Users, Building, Calendar, DollarSign, Eye, Edit3, User, MapPin, PenTool, Target, Sparkles, AlertCircle, X, BookOpen, Loader, Lock } from 'lucide-react'
+import { 
+  Upload, 
+  Sparkles, 
+  Download, 
+  Eye, 
+  X, 
+  Plus, 
+  Trash2, 
+  Users, 
+  FileText, 
+  Settings,
+  LogOut,
+  User,
+  Shield,
+  CheckCircle,
+  AlertCircle,
+  Calendar,
+  Building,
+  PenTool,
+  Target,
+  BookOpen,
+  Loader,
+  Lock,
+  Zap
+} from 'lucide-react'
+import { apiClient } from '@/lib/api'
+import { Document, CustomRule, FirmDetails } from '@/lib/api'
 import Link from 'next/link'
-import { apiClient, Document, CustomRule, FirmDetails } from '@/lib/api'
 
 interface ProcessingStep {
   id: string
@@ -14,6 +39,7 @@ interface ProcessingStep {
 }
 
 export default function DemoPage() {
+  // Demo state - no authentication required
   const [userId, setUserId] = useState('1') // Default to admin (ID: 1)
   const [userRole, setUserRole] = useState('admin') // Default to admin role
   const [signatureFile, setSignatureFile] = useState<File | null>(null)
@@ -31,9 +57,6 @@ export default function DemoPage() {
   const [userUploadedFile, setUserUploadedFile] = useState<File | null>(null)
   const [userUploadedDocument, setUserUploadedDocument] = useState<Document | null>(null)
   const [userProcessingResult, setUserProcessingResult] = useState<any>(null)
-  
-  // Mock user ID for demo (in real app, this would come from auth context)
-  // const [userId] = useState('1')
   
   const [customRules, setCustomRules] = useState<CustomRule[]>([
     {
@@ -121,6 +144,14 @@ export default function DemoPage() {
   const addUserModalRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Check authentication on component mount
+  useEffect(() => {
+    // No authentication check needed for demo
+  }, [])
+
+  // Redirect if not authenticated
+  // No redirect needed for demo
+
   // Handle click outside modals to close
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -171,7 +202,8 @@ export default function DemoPage() {
   const handleSignatureUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
-      setSignatureFile(file)
+      // This state is not used in the current logic, but kept for potential future use
+      // setSignatureFile(file) 
     }
   }
 
@@ -260,6 +292,9 @@ export default function DemoPage() {
     if (!currentFile) return null
 
     try {
+      if (!userId) {
+        throw new Error('User ID not set')
+      }
       const result = await apiClient.uploadDocument(currentFile, userId)
       return result.document
     } catch (err: any) {
@@ -350,6 +385,9 @@ export default function DemoPage() {
     }
 
     try {
+      if (!userId) {
+        throw new Error('User ID not set')
+      }
       await apiClient.downloadDocument(currentDoc.id, userId)
     } catch (err: any) {
       setError(`Download failed: ${err.message}`)
@@ -416,16 +454,20 @@ export default function DemoPage() {
     }
   }
 
+  const handleLogout = () => {
+    // No logout functionality in demo
+  }
+
   return (
     <div className="min-h-screen bg-[#0B1220] text-[#E5E7EB]">
       {/* Header */}
       <header className="bg-[#0B1220]/90 backdrop-blur-md border-b border-white/10 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center space-x-3">
+            <div className="flex items-center space-x-3">
               <div className="w-3 h-3 bg-[#60A5FA] rounded-full animate-pulse" />
               <span className="text-xl font-semibold text-white">NDA Redline</span>
-            </Link>
+            </div>
             <div className="flex items-center space-x-4">
               <span className="text-sm text-[#E5E7EB]/60">AI-Powered Demo</span>
               
@@ -592,7 +634,7 @@ export default function DemoPage() {
             {userRole === 'admin' && (
               <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6">
                 <h2 className="text-xl font-semibold text-white mb-4 flex items-center">
-                  <Target className="w-5 h-5 mr-2 text-[#60A5FA]" />
+                  <Shield className="w-5 h-5 mr-2 text-[#60A5FA]" />
                   Custom Redlining Rules
                 </h2>
                 
@@ -660,32 +702,29 @@ export default function DemoPage() {
                 Redlining Rules
               </h2>
               
-              <div className="space-y-3">
-                {customRules.length > 0 ? (
-                  customRules.map((rule, index) => (
-                    <div key={index} className="flex items-center space-x-3 bg-[#1F2937] rounded-lg p-3">
+              {customRules.length > 0 ? (
+                <div className="space-y-3">
+                  {customRules.map((rule, index) => (
+                    <div key={index} className="flex items-start space-x-3 p-3 bg-white/5 rounded-lg">
                       {getCategoryIcon(rule.category)}
                       <div className="flex-1">
-                        {rule.name && (
-                          <div className="text-sm font-medium text-white mb-1">{rule.name}</div>
-                        )}
-                        <span className="text-sm text-[#E5E7EB]">{rule.instruction}</span>
-                        <span className="ml-2 text-xs text-[#E5E7EB]/60">({getCategoryLabel(rule.category)})</span>
+                        <p className="text-white text-sm">{rule.instruction}</p>
+                        <span className="text-xs text-[#E5E7EB]/60 capitalize">{rule.category}</span>
                       </div>
                     </div>
-                  ))
-                ) : (
-                  <div className="text-center py-6">
-                    <BookOpen className="w-12 h-12 mx-auto mb-3 text-[#E5E7EB]/40" />
-                    <p className="text-[#E5E7EB]/60">
-                      {userRole === 'admin' 
-                        ? 'No custom rules added yet. Create rules above to customize redlining behavior.'
-                        : 'No redlining rules available. Contact your administrator to set up rules.'
-                      }
-                    </p>
-                  </div>
-                )}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6">
+                  <BookOpen className="w-12 h-12 mx-auto mb-3 text-[#E5E7EB]/40" />
+                  <p className="text-[#E5E7EB]/60">
+                    {userRole === 'admin' 
+                      ? 'No custom rules added yet. Create rules above to customize redlining behavior.'
+                      : 'No redlining rules available. Contact your administrator to set up rules.'
+                    }
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Firm Details */}
@@ -924,8 +963,8 @@ export default function DemoPage() {
                   <span className="text-[#E5E7EB]">Custom instruction processing</span>
                 </div>
                 <div className="flex items-center space-x-3">
-                  <Users className="w-4 h-4 text-[#60A5FA]" />
-                  <span className="text-[#E5E7EB]">Smart party detection & inclusion</span>
+                  <Zap className="w-4 h-4 text-[#60A5FA]" />
+                  <span className="text-[#E5E7EB]">AI-powered document analysis</span>
                 </div>
                 <div className="flex items-center space-x-3">
                   <Building className="w-4 h-4 text-[#60A5FA]" />
@@ -1118,4 +1157,5 @@ export default function DemoPage() {
     </div>
   )
 }
+
 

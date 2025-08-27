@@ -18,6 +18,19 @@ def create_app(config_class=Config):
     # CORS setup
     CORS(app, origins=app.config['CORS_ORIGINS'], supports_credentials=True)
     
+    # Define models after db is initialized
+    with app.app_context():
+        from app.models import define_models
+        User, Document, ProcessingRule, ProcessingJob, UserRole, DocumentStatus = define_models(db)
+        
+        # Make models available globally
+        app.User = User
+        app.Document = Document
+        app.ProcessingRule = ProcessingRule
+        app.ProcessingJob = ProcessingJob
+        app.UserRole = UserRole
+        app.DocumentStatus = DocumentStatus
+    
     # Register blueprints
     from app.routes.health import health_bp
     from app.routes.auth import auth_bp
