@@ -2,15 +2,25 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 from alembic import context
-from app import db
-from app.models import User
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv('.env.local')
+load_dotenv('.env')
+
+# Get database URL from environment
+DATABASE_URL = os.environ.get('DATABASE_URL') or 'postgresql://fatinmojumder@localhost:5432/nda_redline'
 
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = db.metadata
+# Set the database URL in the config
+config.set_main_option("sqlalchemy.url", DATABASE_URL)
+
+target_metadata = None
 
 def run_migrations_offline() -> None:
     url = config.get_main_option("sqlalchemy.url")

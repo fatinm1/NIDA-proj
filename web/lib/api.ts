@@ -12,9 +12,10 @@ export interface Document {
 }
 
 export interface CustomRule {
-  name?: string
-  category: string
-  instruction: string
+  id?: number;
+  name?: string;
+  category: string;
+  instruction: string;
 }
 
 export interface FirmDetails {
@@ -182,6 +183,14 @@ class ApiClient {
   }
 
   // Processing rules endpoints
+  async listRules(userId: string): Promise<{ rules: any[] }> {
+    return this.request<{ rules: any[] }>('/v1/rules/', {
+      headers: {
+        'X-User-ID': userId,
+      },
+    });
+  }
+
   async createRule(rule: any, userId: string): Promise<any> { // ProcessingRule interface removed, so using 'any' for now
     const response = await fetch(`${this.baseUrl}/v1/rules/`, {
       method: 'POST',

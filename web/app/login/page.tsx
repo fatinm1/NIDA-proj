@@ -11,7 +11,7 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
+  const [error, setError] = useState<string>('')
   const router = useRouter()
   const { login: authLogin, user, loading } = useAuth()
 
@@ -26,21 +26,28 @@ export default function LoginPage() {
     e.preventDefault()
     setIsLoading(true)
     setError('')
-    
+
     try {
       const response = await login({ email, password })
-      
-      // Use auth context to login
       authLogin(response.user)
-      
-      // Redirect to dashboard page
-      router.push('/dashboard')
-    } catch (error: any) {
-      setError(error.message || 'Login failed. Please try again.')
+      // Redirect will be handled by the useEffect in the component
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Login failed')
     } finally {
       setIsLoading(false)
     }
   }
+
+  // Redirect based on user role after successful login
+  useEffect(() => {
+    if (user && !loading) {
+      if (user.role === 'ADMIN') {
+        router.push('/dashboard')
+      } else {
+        router.push('/user-dashboard')
+      }
+    }
+  }, [user, loading, router])
 
   // Single return statement with conditional rendering
   return (

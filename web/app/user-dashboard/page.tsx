@@ -1,63 +1,38 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useRouter } from 'next/navigation';
 import { 
   Upload, 
-  Sparkles, 
-  Download, 
-  Eye, 
-  X, 
-  Plus, 
-  Trash2, 
-  Users, 
   FileText, 
-  Settings,
+  Shield, 
+  Building, 
+  Zap, 
+  Download, 
+  Sparkles, 
+  CheckCircle, 
+  Loader, 
+  X,
   LogOut,
-  User,
-  Shield,
-  CheckCircle,
-  AlertCircle,
-  Calendar,
-  Building,
-  PenTool,
-  Target,
-  BookOpen,
-  Loader,
-  Lock,
-  Zap
+  Eye
 } from 'lucide-react';
-import { apiClient } from '@/lib/api';
-import { Document, CustomRule, FirmDetails } from '@/lib/api';
+import { apiClient, CustomRule, FirmDetails, Document } from '@/lib/api';
 
-interface ProcessingStep {
-  id: string;
-  name: string;
-  status: 'pending' | 'processing' | 'completed' | 'error';
-  progress: number;
-  details?: string;
+interface ProcessingResult {
+  rules_applied: number;
+  changes_made: number;
+  processing_time: string;
 }
 
-export default function Dashboard() {
-  const { user, logout, loading } = useAuth();
+export default function UserDashboard() {
+  const { user, isAuthenticated, loading, logout } = useAuth();
   const router = useRouter();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Document processing states
+  
+  // State variables
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [uploadedDocument, setUploadedDocument] = useState<Document | null>(null);
-  const [processingResult, setProcessingResult] = useState<any>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [currentStep, setCurrentStep] = useState(0);
-  const [showPreview, setShowPreview] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-
-  // Custom rules state
   const [customRules, setCustomRules] = useState<CustomRule[]>([]);
-
-  // Firm details state
   const [firmDetails, setFirmDetails] = useState<FirmDetails>({
     name: '',
     address: '',
@@ -69,84 +44,51 @@ export default function Dashboard() {
     email: '',
     phone: ''
   });
-
-  // Modal states
-  const [showAdminRuleModal, setShowAdminRuleModal] = useState(false);
-  const [showAddUserModal, setShowAddUserModal] = useState(false);
-  const [adminRuleName, setAdminRuleName] = useState('');
-  const [adminRuleInstruction, setAdminRuleInstruction] = useState('');
-  const [adminRuleCategory, setAdminRuleCategory] = useState('other');
-  const [newUserData, setNewUserData] = useState({
-    username: '',
-    email: '',
-    role: 'USER',
-    password: ''
-  });
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [processingResult, setProcessingResult] = useState<ProcessingResult | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  
+  // Refs
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Processing steps
-  const [processingSteps] = useState<ProcessingStep[]>([
-    { 
-      id: 'upload', 
-      name: 'Document Analysis & Validation', 
-      status: 'pending', 
-      progress: 0,
-      details: 'Analyzing NDA structure and content'
-    },
-    { 
-      id: 'rules', 
-      name: 'Applying Custom Instructions', 
-      status: 'pending', 
-      progress: 0,
-      details: 'Processing user-defined redlining rules'
-    },
-    { 
-      id: 'ai', 
-      name: 'AI-Powered Redlining', 
-      status: 'pending', 
-      progress: 0,
-      details: 'AI agent applying intelligent modifications'
-    },
-    { 
-      id: 'firm', 
-      name: 'Inserting Firm Details', 
-      status: 'pending', 
-      progress: 0,
-      details: 'Adding firm information and signature blocks'
-    },
-    { 
-      id: 'output', 
-      name: 'Generating Redlined Document', 
-      status: 'pending', 
-      progress: 0,
-      details: 'Creating final Word document with tracked changes'
-    }
-  ]);
+  const processingSteps = [
+    { id: 1, name: 'Document Analysis & Validation', details: 'Analyzing document structure and content' },
+    { id: 2, name: 'Applying Custom Instructions', details: 'Processing admin-defined redlining rules' },
+    { id: 3, name: 'AI-Powered Redlining', details: 'AI agent applying intelligent modifications' },
+    { id: 4, name: 'Inserting Firm Details', details: 'Adding signature blocks and firm information' },
+    { id: 5, name: 'Generating Redlined Document', details: 'Creating final document with tracked changes' }
+  ];
 
   // Check authentication and role
   useEffect(() => {
     if (!loading) {
-      if (!user) {
+      if (!isAuthenticated) {
         router.push('/login');
-      } else if (user?.role === 'USER') {
-        router.push('/user-dashboard');
+      } else if (user?.role === 'ADMIN') {
+        router.push('/dashboard');
       }
     }
-  }, [loading, user, router]);
+  }, [loading, isAuthenticated, user, router]);
 
-  // Load existing rules from backend
+  // Load admin's custom rules
   useEffect(() => {
-    if (user && user.role === 'ADMIN') {
-      loadExistingRules();
+    if (user && user.role === 'USER') {
+      loadAdminRules();
     }
   }, [user]);
 
-  const loadExistingRules = async () => {
+  const loadAdminRules = async () => {
     try {
       const response = await apiClient.listRules(user?.id?.toString() || '');
+      // The backend returns { rules: [...] }
       setCustomRules(response.rules);
     } catch (error) {
-      console.error('Error loading existing rules:', error);
-      // Start with empty rules if backend fails
+      console.error('Error loading admin rules:', error);
+      // No fallback rules - users should only see rules that admins actually created
       setCustomRules([]);
     }
   };
@@ -158,10 +100,9 @@ export default function Dashboard() {
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
+    if (file && file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
       setUploadedFile(file);
       setError(null);
-      setSuccess('Document uploaded successfully!');
       
       // Create a mock document object
       const mockDocument: Document = {
@@ -175,6 +116,8 @@ export default function Dashboard() {
       };
       
       setUploadedDocument(mockDocument);
+    } else {
+      setError('Please upload a valid .docx file');
     }
   };
 
@@ -249,150 +192,44 @@ export default function Dashboard() {
     }
   };
 
-  const addCustomRule = () => {
-    const newRule: CustomRule = {
-      instruction: '',
-      category: 'other'
-    };
-    setCustomRules([...customRules, newRule]);
-  };
-
-  const updateCustomRule = async (index: number, field: keyof CustomRule, value: string) => {
-    try {
-      const ruleToUpdate = customRules[index];
-      if (ruleToUpdate.id) {
-        // Update in backend
-        const updates = { [field]: value };
-        await apiClient.updateRule(ruleToUpdate.id, updates, user?.id?.toString() || '');
-      }
-      // Update local state
-      const updatedRules = [...customRules];
-      updatedRules[index] = { ...updatedRules[index], [field]: value };
-      setCustomRules(updatedRules);
-    } catch (error) {
-      setError('Failed to update rule');
-    }
-  };
-
-  const removeCustomRule = async (index: number) => {
-    try {
-      const ruleToDelete = customRules[index];
-      if (ruleToDelete.id) {
-        // Delete from backend
-        await apiClient.deleteRule(ruleToDelete.id, user?.id?.toString() || '');
-      }
-      // Remove from local state
-      setCustomRules(customRules.filter((_, i) => i !== index));
-      setSuccess('Rule deleted successfully!');
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (error) {
-      setError('Failed to delete rule');
-    }
-  };
-
   const updateFirmDetails = (field: keyof FirmDetails, value: string) => {
     setFirmDetails(prev => ({ ...prev, [field]: value }));
   };
 
-  const createAdminRule = async () => {
-    if (!adminRuleName.trim() || !adminRuleInstruction.trim()) {
-      setError('Rule name and instruction are required');
-      return;
-    }
-
-    try {
-      const newRule = {
-        name: adminRuleName,
-        category: adminRuleCategory,
-        instruction: adminRuleInstruction
-      };
-      
-      // Save rule to backend
-      const response = await apiClient.createRule(newRule, user?.id?.toString() || '');
-      
-      // Add to local state
-      setCustomRules(prev => [...prev, response]);
-      
-      setAdminRuleName('');
-      setAdminRuleInstruction('');
-      setAdminRuleCategory('other');
-      setShowAdminRuleModal(false);
-      
-      setError(null);
-      setSuccess('Rule created successfully!');
-      
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err: any) {
-      setError(err.message || 'Failed to create rule');
-    }
-  };
-
-  const addNewUser = async () => {
-    if (!newUserData.username.trim() || !newUserData.email.trim() || !newUserData.password.trim()) {
-      setError('Username, email, and password are required');
-      return;
-    }
-
-    try {
-      setError(null);
-      setSuccess(`User "${newUserData.username}" created successfully!`);
-      
-      setNewUserData({
-        username: '',
-        email: '',
-        role: 'USER',
-        password: ''
-      });
-      setShowAddUserModal(false);
-      
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err: any) {
-      setError(err.message || 'Failed to create user');
-    }
-  };
-
   const getCategoryIcon = (category: string) => {
+    const iconClass = "w-4 h-4";
     switch (category) {
-      case 'term': return <Calendar className="w-4 h-4 text-blue-400" />;
-      case 'parties': return <Users className="w-4 h-4 text-green-400" />;
-      case 'firm': return <Building className="w-4 h-4 text-purple-400" />;
-      case 'signature': return <PenTool className="w-4 h-4 text-orange-400" />;
-      default: return <Target className="w-4 h-4 text-gray-400" />;
+      case 'term':
+        return <div className={`${iconClass} bg-blue-500 rounded-full`} />;
+      case 'parties':
+        return <div className={`${iconClass} bg-green-500 rounded-full`} />;
+      case 'liability':
+        return <div className={`${iconClass} bg-yellow-500 rounded-full`} />;
+      default:
+        return <div className={`${iconClass} bg-purple-500 rounded-full`} />;
     }
   };
 
-  const getCategoryLabel = (category: string) => {
-    switch (category) {
-      case 'term': return 'Term Duration';
-      case 'parties': return 'Parties';
-      case 'firm': return 'Firm Details';
-      case 'signature': return 'Signature';
-      default: return 'Other';
-    }
-  };
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0B1220] text-[#E5E7EB] flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-[#60A5FA] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-xl text-[#E5E7EB]/80">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
-  // Single return statement with conditional rendering
+  // Redirect if not authenticated or if admin
+  if (!isAuthenticated || user?.role === 'ADMIN') {
+    return null;
+  }
+
   return (
     <div className="min-h-screen bg-[#0B1220] text-[#E5E7EB]">
-      {loading ? (
-        // Loading state
-        <div className="flex items-center justify-center h-screen">
-          <div className="text-center">
-            <div className="w-16 h-16 border-4 border-[#60A5FA] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-xl text-[#E5E7EB]/80">Validating authentication...</p>
-          </div>
-        </div>
-      ) : !user ? (
-        // Don't render anything while redirecting
-        <div className="flex items-center justify-center h-screen">
-          <div className="text-center">
-            <div className="w-16 h-16 border-4 border-[#60A5FA] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-xl text-[#E5E7EB]/80">Redirecting...</p>
-          </div>
-        </div>
-      ) : (
-        // Main dashboard content (only for admin users)
-        <>
+      {/* Header */}
       <header className="bg-[#0B1220]/90 backdrop-blur-md border-b border-white/10 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
@@ -401,9 +238,9 @@ export default function Dashboard() {
               <span className="text-xl font-semibold text-white">NDA Redline</span>
             </div>
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-[#E5E7EB]/60">Admin Dashboard</span>
-              <span className={`px-2 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-400 border border-blue-500/30`}>
-                ADMIN
+              <span className="text-sm text-[#E5E7EB]/60">User Dashboard</span>
+              <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-500/20 text-green-400 border border-green-500/30">
+                USER
               </span>
               <button
                 onClick={handleLogout}
@@ -418,9 +255,9 @@ export default function Dashboard() {
 
       <div className="max-w-7xl mx-auto px-6 py-8">
         <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-white mb-4">Admin Dashboard</h1>
+          <h1 className="text-4xl font-bold text-white mb-4">User Dashboard</h1>
           <p className="text-xl text-[#E5E7EB]/80 max-w-3xl mx-auto">
-            Manage your NDA redlining system, create custom rules, and process documents with AI-powered intelligence.
+            Process your NDA documents using AI-powered redlining with admin-defined rules.
           </p>
         </div>
 
@@ -428,7 +265,7 @@ export default function Dashboard() {
         {error && (
           <div className="mb-8 bg-red-500/20 border border-red-500/30 rounded-xl p-4">
             <div className="flex items-center space-x-3">
-              <AlertCircle className="w-5 h-5 text-red-400" />
+              <div className="w-5 h-5 bg-red-500 rounded-full" />
               <span className="text-red-400">{error}</span>
             </div>
           </div>
@@ -438,59 +275,11 @@ export default function Dashboard() {
         {success && (
           <div className="mb-8 bg-green-500/20 border border-green-500/30 rounded-xl p-4">
             <div className="flex items-center space-x-3">
-              <CheckCircle className="w-5 h-5 text-green-400" />
+              <div className="w-5 h-5 bg-green-500 rounded-full" />
               <span className="text-green-400">{success}</span>
             </div>
           </div>
         )}
-
-        {/* Admin Section */}
-        <div className="mb-8 bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6">
-          <h2 className="text-xl font-semibold text-white mb-4 flex items-center">
-            <Users className="w-5 h-5 mr-2 text-[#60A5FA]" />
-            Admin Dashboard
-          </h2>
-          
-          <div className="grid md:grid-cols-2 gap-6">
-            {/* System Statistics */}
-            <div className="bg-[#1F2937] rounded-lg p-4">
-              <h3 className="text-lg font-medium text-white mb-3">System Overview</h3>
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-[#E5E7EB]/60">Total Users:</span>
-                  <span className="text-white">2</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[#E5E7EB]/60">Total Documents:</span>
-                  <span className="text-white">-</span>
-              </div>
-                <div className="flex justify-between">
-                  <span className="text-[#E5E7EB]/60">Custom Rules:</span>
-                  <span className="text-white">{customRules.length}</span>
-              </div>
-            </div>
-          </div>
-
-            {/* Quick Actions */}
-            <div className="bg-[#1F2937] rounded-lg p-4">
-              <h3 className="text-lg font-medium text-white mb-3">Quick Actions</h3>
-              <div className="space-y-2">
-                <button 
-                  onClick={() => setShowAdminRuleModal(true)}
-                  className="w-full bg-[#60A5FA] hover:bg-[#60A5FA]/80 text-white px-4 py-2 rounded-md text-sm transition-colors"
-                >
-                  Create Redlining Rule
-                </button>
-                <button 
-                  onClick={() => setShowAddUserModal(true)}
-                  className="w-full bg-[#10B981] hover:bg-[#10B981]/80 text-white px-4 py-2 rounded-md text-sm transition-colors"
-                >
-                  Add New User
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
 
         <div className="grid lg:grid-cols-2 gap-8">
           {/* Left Column - Upload & Configuration */}
@@ -540,71 +329,35 @@ export default function Dashboard() {
               )}
             </div>
 
-            {/* Custom Rules */}
+            {/* Admin's Redlining Rules */}
             <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6">
               <h2 className="text-xl font-semibold text-white mb-4 flex items-center">
                 <Shield className="w-5 h-5 mr-2 text-[#60A5FA]" />
-                Custom Redlining Rules
+                Admin's Redlining Rules
               </h2>
               
               <div className="space-y-4">
-                <div className="flex space-x-3">
-                  <select
-                    value={adminRuleCategory}
-                    onChange={(e) => setAdminRuleCategory(e.target.value)}
-                    className="flex-1 bg-[#1F2937] border border-white/20 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#60A5FA]"
-                  >
-                    <option value="term">Term Duration</option>
-                    <option value="parties">Parties</option>
-                    <option value="firm">Firm Details</option>
-                    <option value="signature">Signature</option>
-                    <option value="other">Other</option>
-                  </select>
-                  <input
-                    type="text"
-                    value={adminRuleName}
-                    onChange={(e) => setAdminRuleName(e.target.value)}
-                    placeholder="Enter rule name..."
-                    className="flex-1 bg-[#1F2937] border border-white/20 rounded-md px-3 py-2 text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:ring-2 focus:ring-[#60A5FA]"
-                  />
-                  <button
-                    onClick={addCustomRule}
-                    className="bg-[#60A5FA] hover:bg-[#60A5FA]/80 text-white px-4 py-2 rounded-md transition-colors"
-                  >
-                    Add Rule
-                  </button>
-                </div>
-                
-                {/* Display custom rules */}
                 {customRules.length > 0 ? (
                   <div className="space-y-2">
                     <h3 className="text-sm font-medium text-[#E5E7EB]/80">Active Rules:</h3>
                     {customRules.map((rule, index) => (
-                      <div key={index} className="flex items-center justify-between bg-[#1F2937] rounded-lg p-3">
-                        <div className="flex items-center space-x-3">
-                          {getCategoryIcon(rule.category)}
-                          <div>
-                            {rule.name && (
-                              <div className="text-sm font-medium text-white">{rule.name}</div>
-                            )}
-                            <span className="text-sm text-[#E5E7EB]">{rule.instruction}</span>
-                          </div>
+                      <div key={index} className="flex items-center space-x-3 bg-[#1F2937] rounded-lg p-3">
+                        {getCategoryIcon(rule.category)}
+                        <div>
+                          {rule.name && (
+                            <div className="text-sm font-medium text-white">{rule.name}</div>
+                          )}
+                          <span className="text-sm text-[#E5E7EB]">{rule.instruction}</span>
                         </div>
-                        <button
-                          onClick={() => removeCustomRule(index)}
-                          className="text-red-400 hover:text-red-300 transition-colors"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
                       </div>
                     ))}
                   </div>
                 ) : (
                   <div className="text-center py-8">
                     <Shield className="w-12 h-12 mx-auto mb-4 text-[#E5E7EB]/40" />
-                    <p className="text-[#E5E7EB]/60">No redlining rules created yet</p>
-                    <p className="text-sm text-[#E5E7EB]/40 mt-2">Create your first rule using the form above</p>
-                    <p className="text-xs text-[#E5E7EB]/30 mt-1">Rules will be available to all users</p>
+                    <p className="text-[#E5E7EB]/60">No redlining rules defined yet</p>
+                    <p className="text-sm text-[#E5E7EB]/40 mt-2">Your admin will create rules for document processing</p>
+                    <p className="text-xs text-[#E5E7EB]/30 mt-1">Rules will appear here once they're created</p>
                   </div>
                 )}
               </div>
@@ -624,7 +377,6 @@ export default function Dashboard() {
                     type="text"
                     value={firmDetails.name}
                     onChange={(e) => updateFirmDetails('name', e.target.value)}
-                    placeholder="Enter your law firm name"
                     className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:border-[#60A5FA]"
                   />
                 </div>
@@ -634,7 +386,6 @@ export default function Dashboard() {
                     type="text"
                     value={firmDetails.address}
                     onChange={(e) => updateFirmDetails('address', e.target.value)}
-                    placeholder="Enter street address"
                     className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:border-[#60A5FA]"
                   />
                 </div>
@@ -644,7 +395,6 @@ export default function Dashboard() {
                     type="text"
                     value={firmDetails.city}
                     onChange={(e) => updateFirmDetails('city', e.target.value)}
-                    placeholder="Enter city"
                     className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:border-[#60A5FA]"
                   />
                 </div>
@@ -654,7 +404,6 @@ export default function Dashboard() {
                     type="text"
                     value={firmDetails.state}
                     onChange={(e) => updateFirmDetails('state', e.target.value)}
-                    placeholder="Enter state (e.g., NY)"
                     className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:border-[#60A5FA]"
                   />
                 </div>
@@ -664,7 +413,6 @@ export default function Dashboard() {
                     type="text"
                     value={firmDetails.zipCode}
                     onChange={(e) => updateFirmDetails('zipCode', e.target.value)}
-                    placeholder="Enter ZIP code"
                     className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:border-[#60A5FA]"
                   />
                 </div>
@@ -674,7 +422,6 @@ export default function Dashboard() {
                     type="text"
                     value={firmDetails.signerName}
                     onChange={(e) => updateFirmDetails('signerName', e.target.value)}
-                    placeholder="Enter signer's full name"
                     className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:border-[#60A5FA]"
                   />
                 </div>
@@ -684,7 +431,6 @@ export default function Dashboard() {
                     type="text"
                     value={firmDetails.signerTitle}
                     onChange={(e) => updateFirmDetails('signerTitle', e.target.value)}
-                    placeholder="Enter signer's title"
                     className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:border-[#60A5FA]"
                   />
                 </div>
@@ -694,7 +440,6 @@ export default function Dashboard() {
                     type="email"
                     value={firmDetails.email}
                     onChange={(e) => updateFirmDetails('email', e.target.value)}
-                    placeholder="Enter email address"
                     className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:border-[#60A5FA]"
                   />
                 </div>
@@ -704,7 +449,6 @@ export default function Dashboard() {
                     type="tel"
                     value={firmDetails.phone}
                     onChange={(e) => updateFirmDetails('phone', e.target.value)}
-                    placeholder="Enter phone number"
                     className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:border-[#60A5FA]"
                   />
                 </div>
@@ -759,11 +503,11 @@ export default function Dashboard() {
                   <Sparkles className="w-5 h-5 mr-2 text-[#60A5FA]" />
                   AI Agent Processing Your NDA
                 </h2>
-
-              <div className="space-y-4">
+                
+                <div className="space-y-4">
                   {processingSteps.map((step, index) => (
                     <div key={step.id} className="space-y-2">
-                    <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between">
                         <div className="flex-1">
                           <span className="text-[#E5E7EB]">{step.name}</span>
                           {index === currentStep && step.details && (
@@ -837,7 +581,7 @@ export default function Dashboard() {
                     <div className="flex items-center space-x-2">
                       <div className="w-3 h-3 bg-green-500 rounded-full" />
                       <span className="text-[#E5E7EB]">Firm details and signature inserted</span>
-                      </div>
+                    </div>
                     <div className="flex items-center space-x-2">
                       <div className="w-3 h-3 bg-purple-500 rounded-full" />
                       <span className="text-[#E5E7EB]">Confidentiality capped at 18 months</span>
@@ -863,142 +607,6 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
-        </>
-      )}
-
-      {/* Create Rule Modal */}
-      {showAdminRuleModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-[#1F2937] rounded-xl p-6 w-full max-w-md mx-4">
-            <h3 className="text-xl font-semibold text-white mb-4">Create Redlining Rule</h3>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-[#E5E7EB]/60 mb-1">Rule Name</label>
-                <input
-                  type="text"
-                  value={adminRuleName}
-                  onChange={(e) => setAdminRuleName(e.target.value)}
-                  placeholder="Enter rule name..."
-                  className="w-full px-3 py-2 bg-[#0B1220] border border-white/20 rounded text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:border-[#60A5FA]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm text-[#E5E7EB]/60 mb-1">Category</label>
-                <select
-                  value={adminRuleCategory}
-                  onChange={(e) => setAdminRuleCategory(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#0B1220] border border-white/20 rounded text-white focus:outline-none focus:border-[#60A5FA]"
-                >
-                  <option value="term">Term Duration</option>
-                  <option value="parties">Parties</option>
-                  <option value="firm">Firm Details</option>
-                  <option value="signature">Signature</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm text-[#E5E7EB]/60 mb-1">Instruction</label>
-                <textarea
-                  value={adminRuleInstruction}
-                  onChange={(e) => setAdminRuleInstruction(e.target.value)}
-                  placeholder="Enter detailed instruction..."
-                  rows={3}
-                  className="w-full px-3 py-2 bg-[#0B1220] border border-white/20 rounded text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:border-[#60A5FA]"
-                />
-              </div>
-            </div>
-            
-            <div className="flex space-x-3 mt-6">
-              <button
-                onClick={() => setShowAdminRuleModal(false)}
-                className="flex-1 px-4 py-2 bg-[#374151] hover:bg-[#4B5563] text-white rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={createAdminRule}
-                className="flex-1 px-4 py-2 bg-[#60A5FA] hover:bg-[#60A5FA]/80 text-white rounded-lg transition-colors"
-              >
-                Create Rule
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add User Modal */}
-      {showAddUserModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-[#1F2937] rounded-xl p-6 w-full max-w-md mx-4">
-            <h3 className="text-xl font-semibold text-white mb-4">Add New User</h3>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-[#E5E7EB]/60 mb-1">Username</label>
-                <input
-                  type="text"
-                  value={newUserData.username}
-                  onChange={(e) => setNewUserData(prev => ({ ...prev, username: e.target.value }))}
-                  placeholder="Enter username..."
-                  className="w-full px-3 py-2 bg-[#0B1220] border border-white/20 rounded text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:border-[#60A5FA]"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm text-[#E5E7EB]/60 mb-1">Email</label>
-                <input
-                  type="email"
-                  value={newUserData.email}
-                  onChange={(e) => setNewUserData(prev => ({ ...prev, email: e.target.value }))}
-                  placeholder="Enter email..."
-                  className="w-full px-3 py-2 bg-[#0B1220] border border-white/20 rounded text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:border-[#60A5FA]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm text-[#E5E7EB]/60 mb-1">Role</label>
-                <select
-                  value={newUserData.role}
-                  onChange={(e) => setNewUserData(prev => ({ ...prev, role: e.target.value }))}
-                  className="w-full px-3 py-2 bg-[#0B1220] border border-white/20 rounded text-white focus:outline-none focus:border-[#60A5FA]"
-                >
-                  <option value="USER">User</option>
-                  <option value="ADMIN">Admin</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm text-[#E5E7EB]/60 mb-1">Password</label>
-                <input
-                  type="password"
-                  value={newUserData.password}
-                  onChange={(e) => setNewUserData(prev => ({ ...prev, password: e.target.value }))}
-                  placeholder="Enter password..."
-                  className="w-full px-3 py-2 bg-[#0B1220] border border-white/20 rounded text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:border-[#60A5FA]"
-                />
-              </div>
-            </div>
-            
-            <div className="flex space-x-3 mt-6">
-              <button
-                onClick={() => setShowAddUserModal(false)}
-                className="flex-1 px-4 py-2 bg-[#374151] hover:bg-[#4B5563] text-white rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={addNewUser}
-                className="flex-1 px-4 py-2 bg-[#10B981] hover:bg-[#10B981]/80 text-white rounded-lg transition-colors"
-              >
-                Add User
-              </button>
-          </div>
-        </div>
-      </div>
-      )}
     </div>
   );
 }

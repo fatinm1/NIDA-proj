@@ -78,14 +78,24 @@ export default function RegisterPage() {
       // Use auth context to login
       authLogin(response.user)
       
-      // Redirect to dashboard page
-      router.push('/dashboard')
+      // Redirect will be handled by the useEffect in the component
     } catch (error: any) {
       setSubmitError(error.message || 'Registration failed. Please try again.')
     } finally {
       setIsLoading(false)
     }
   }
+
+  // Redirect based on user role after successful registration
+  useEffect(() => {
+    if (user && !loading) {
+      if (user.role === 'ADMIN') {
+        router.push('/dashboard')
+      } else {
+        router.push('/user-dashboard')
+      }
+    }
+  }, [user, loading, router])
 
   // Single return statement with conditional rendering
   return (
