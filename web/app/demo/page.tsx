@@ -1,26 +1,9 @@
 'use client'
 
-import { useState } from 'react'
-import { Upload, FileText, Settings, Download, CheckCircle, Clock, Zap, Shield, Users, Building, Calendar, DollarSign, Eye, Edit3, User, MapPin, PenTool, Target, Sparkles } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Upload, FileText, Settings, Download, CheckCircle, Zap, Users, Building, Calendar, DollarSign, Eye, Edit3, User, MapPin, PenTool, Target, Sparkles, AlertCircle, X, BookOpen, Loader, Lock } from 'lucide-react'
 import Link from 'next/link'
-
-interface CustomRule {
-  id: string
-  instruction: string
-  category: 'term' | 'parties' | 'firm' | 'signature' | 'other'
-}
-
-interface FirmDetails {
-  name: string
-  address: string
-  city: string
-  state: string
-  zipCode: string
-  signerName: string
-  signerTitle: string
-  email: string
-  phone: string
-}
+import { apiClient, Document, CustomRule, FirmDetails } from '@/lib/api'
 
 interface ProcessingStep {
   id: string
@@ -31,30 +14,41 @@ interface ProcessingStep {
 }
 
 export default function DemoPage() {
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null)
+  const [userId, setUserId] = useState('1') // Default to admin (ID: 1)
+  const [userRole, setUserRole] = useState('admin') // Default to admin role
   const [signatureFile, setSignatureFile] = useState<File | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [currentStep, setCurrentStep] = useState(0)
   const [showPreview, setShowPreview] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+  
+  // Role-specific document states
+  const [adminUploadedFile, setAdminUploadedFile] = useState<File | null>(null)
+  const [adminUploadedDocument, setAdminUploadedDocument] = useState<Document | null>(null)
+  const [adminProcessingResult, setAdminProcessingResult] = useState<any>(null)
+  
+  const [userUploadedFile, setUserUploadedFile] = useState<File | null>(null)
+  const [userUploadedDocument, setUserUploadedDocument] = useState<Document | null>(null)
+  const [userProcessingResult, setUserProcessingResult] = useState<any>(null)
+  
+  // Mock user ID for demo (in real app, this would come from auth context)
+  // const [userId] = useState('1')
   
   const [customRules, setCustomRules] = useState<CustomRule[]>([
     {
-      id: '1',
       instruction: 'Change term length to 2 years if longer than 2 years',
       category: 'term'
     },
     {
-      id: '2',
       instruction: 'Include investors, potential financing sources, and agents if not included',
       category: 'parties'
     },
     {
-      id: '3',
       instruction: 'Cap confidentiality obligations at 18 months',
       category: 'term'
     },
     {
-      id: '4',
       instruction: 'Limit liability to actual damages, exclude consequential damages',
       category: 'other'
     }
@@ -82,10 +76,10 @@ export default function DemoPage() {
     },
     { 
       id: 'rules', 
-      name: 'Applying Custom Instructions', 
+      name: userRole === 'admin' ? 'Applying Custom Instructions' : 'Standard Processing', 
       status: 'pending', 
       progress: 0,
-      details: 'Processing user-defined redlining rules'
+      details: userRole === 'admin' ? 'Processing user-defined redlining rules' : 'Using standard legal practices'
     },
     { 
       id: 'ai', 
@@ -111,11 +105,66 @@ export default function DemoPage() {
   ])
 
   const [newRule, setNewRule] = useState('')
+  const [newRuleCategory, setNewRuleCategory] = useState('other')
+  const [showAdminRuleModal, setShowAdminRuleModal] = useState(false)
+  const [adminRuleName, setAdminRuleName] = useState('')
+  const [adminRuleInstruction, setAdminRuleInstruction] = useState('')
+  const [adminRuleCategory, setAdminRuleCategory] = useState('other')
+  const [showAddUserModal, setShowAddUserModal] = useState(false)
+  const [newUserData, setNewUserData] = useState({
+    username: '',
+    email: '',
+    role: 'USER',
+    password: ''
+  })
+  const adminRuleModalRef = useRef<HTMLDivElement>(null)
+  const addUserModalRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Handle click outside modals to close
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node
+      
+      if (showAdminRuleModal && adminRuleModalRef.current && !adminRuleModalRef.current.contains(target)) {
+        setShowAdminRuleModal(false)
+      }
+      if (showAddUserModal && addUserModalRef.current && !addUserModalRef.current.contains(target)) {
+        setShowAddUserModal(false)
+      }
+    }
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowAdminRuleModal(false)
+        setShowAddUserModal(false)
+      }
+    }
+
+    if (showAdminRuleModal || showAddUserModal) {
+      document.addEventListener('mousedown', handleClickOutside)
+      document.addEventListener('keydown', handleEscape)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [showAdminRuleModal, showAddUserModal])
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file && file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-      setUploadedFile(file)
+      if (userRole === 'admin') {
+        setAdminUploadedFile(file)
+        setUserUploadedFile(null) // Clear user file when admin uploads
+      } else {
+        setUserUploadedFile(file)
+        setAdminUploadedFile(null) // Clear admin file when user uploads
+      }
+      setError(null)
+    } else {
+      setError('Please select a valid .docx file')
     }
   }
 
@@ -129,48 +178,182 @@ export default function DemoPage() {
   const addCustomRule = () => {
     if (newRule.trim()) {
       const rule: CustomRule = {
-        id: Date.now().toString(),
         instruction: newRule.trim(),
-        category: 'other'
+        category: newRuleCategory
       }
       setCustomRules(prev => [...prev, rule])
       setNewRule('')
+      setNewRuleCategory('other')
     }
   }
 
-  const removeCustomRule = (id: string) => {
-    setCustomRules(prev => prev.filter(rule => rule.id !== id))
+  const removeCustomRule = (index: number) => {
+    setCustomRules(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const createAdminRule = async () => {
+    if (!adminRuleName.trim() || !adminRuleInstruction.trim()) {
+      setError('Rule name and instruction are required')
+      return
+    }
+
+    try {
+      // For demo purposes, add to local state
+      const newRule: CustomRule = {
+        name: adminRuleName,
+        category: adminRuleCategory,
+        instruction: adminRuleInstruction
+      }
+      
+      setCustomRules(prev => [...prev, newRule])
+      
+      // Clear form and close modal
+      setAdminRuleName('')
+      setAdminRuleInstruction('')
+      setAdminRuleCategory('other')
+      setShowAdminRuleModal(false)
+      
+      // Show success message
+      setError(null)
+      setSuccess('Rule created successfully!')
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccess(null), 3000)
+    } catch (err: any) {
+      setError(err.message || 'Failed to create rule')
+    }
+  }
+
+  const addNewUser = async () => {
+    if (!newUserData.username.trim() || !newUserData.email.trim() || !newUserData.password.trim()) {
+      setError('Username, email, and password are required')
+      return
+    }
+
+    try {
+      // For demo purposes, show success message
+      setError(null)
+      setSuccess(`User "${newUserData.username}" created successfully!`)
+      
+      // Clear form and close modal
+      setNewUserData({
+        username: '',
+        email: '',
+        role: 'USER',
+        password: ''
+      })
+      setShowAddUserModal(false)
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccess(null), 3000)
+    } catch (err: any) {
+      setError(err.message || 'Failed to create user')
+    }
   }
 
   const updateFirmDetails = (field: keyof FirmDetails, value: string) => {
     setFirmDetails(prev => ({ ...prev, [field]: value }))
   }
 
+  const uploadDocument = async (): Promise<Document | null> => {
+    const currentFile = getCurrentUploadedFile()
+    if (!currentFile) return null
+
+    try {
+      const result = await apiClient.uploadDocument(currentFile, userId)
+      return result.document
+    } catch (err: any) {
+      setError(err.message || 'Failed to upload document')
+      return null
+    }
+  }
+
   const startProcessing = async () => {
-    if (!uploadedFile) return
+    const currentFile = getCurrentUploadedFile()
+    if (!currentFile) return
     
     setIsProcessing(true)
     setCurrentStep(0)
+    setError(null)
     
-    // Simulate realistic processing with AI agent details
-    for (let i = 0; i < processingSteps.length; i++) {
-      setCurrentStep(i)
+    try {
+      // Step 1: Upload document
+      setCurrentStep(0)
+      const document = await uploadDocument()
+      if (!document) {
+        throw new Error('Failed to upload document')
+      }
       
-      // Simulate different processing times for each step
-      const stepTime = i === 2 ? 3000 : 1500 // AI step takes longer
-      await new Promise(resolve => setTimeout(resolve, stepTime))
+      // Update role-specific document state
+      if (userRole === 'admin') {
+        setAdminUploadedDocument(document)
+      } else {
+        setUserUploadedDocument(document)
+      }
+      
+      // Step 2: Determine rules to use based on user role
+      setCurrentStep(1)
+      let rulesToUse: CustomRule[] = []
+      
+      if (userRole === 'admin') {
+        // Admins can use their custom rules
+        rulesToUse = customRules
+      }
+      // Regular users get no rules (empty array)
+      
+      // Step 3: Process document with AI
+      setCurrentStep(2)
+      
+      const result = await apiClient.processDocument(
+        document.id,
+        rulesToUse,
+        firmDetails,
+        userId
+      )
+      
+      // Update the role-specific document state with the processing result
+      if (result.document) {
+        if (userRole === 'admin') {
+          setAdminUploadedDocument(result.document)
+        } else {
+          setUserUploadedDocument(result.document)
+        }
+      }
+      
+      // Update role-specific processing result
+      if (userRole === 'admin') {
+        setAdminProcessingResult(result.processing_result)
+      } else {
+        setUserProcessingResult(result.processing_result)
+      }
+      
+      setCurrentStep(4) // Mark as completed
+      
+      // Wait a moment to show completion
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
+      setIsProcessing(false)
+      setShowPreview(true)
+      
+    } catch (err: any) {
+      setError(err.message || 'Processing failed')
+      setIsProcessing(false)
+      setCurrentStep(0)
     }
-    
-    setIsProcessing(false)
-    setShowPreview(true)
   }
 
-  const downloadDocument = () => {
-    // Simulate download
-    const link = document.createElement('a')
-    link.href = '#'
-    link.download = 'redlined-nda.docx'
-    link.click()
+  const downloadDocument = async () => {
+    const currentDoc = getCurrentUploadedDocument()
+    if (!currentDoc?.output_path) {
+      setError('No processed document available for download')
+      return
+    }
+
+    try {
+      await apiClient.downloadDocument(currentDoc.id, userId)
+    } catch (err: any) {
+      setError(`Download failed: ${err.message}`)
+    }
   }
 
   const getCategoryIcon = (category: string) => {
@@ -180,6 +363,56 @@ export default function DemoPage() {
       case 'firm': return <Building className="w-4 h-4 text-purple-400" />
       case 'signature': return <PenTool className="w-4 h-4 text-orange-400" />
       default: return <Target className="w-4 h-4 text-gray-400" />
+    }
+  }
+
+  const getCategoryLabel = (category: string) => {
+    switch (category) {
+      case 'term': return 'Term Duration'
+      case 'parties': return 'Parties'
+      case 'firm': return 'Firm Details'
+      case 'signature': return 'Signature'
+      default: return 'Other'
+    }
+  }
+
+  const getCurrentUploadedFile = () => {
+    return userRole === 'admin' ? adminUploadedFile : userUploadedFile;
+  }
+
+  const clearCurrentUploadedFile = () => {
+    if (userRole === 'admin') {
+      setAdminUploadedFile(null);
+    } else {
+      setUserUploadedFile(null);
+    }
+  }
+
+  const getCurrentUploadedDocument = () => {
+    return userRole === 'admin' ? adminUploadedDocument : userUploadedDocument;
+  }
+
+  const getCurrentProcessingResult = () => {
+    return userRole === 'admin' ? adminProcessingResult : userProcessingResult;
+  }
+
+  const clearAllState = () => {
+    // Clear all document and processing state
+    setAdminUploadedFile(null)
+    setAdminUploadedDocument(null)
+    setAdminProcessingResult(null)
+    setUserUploadedFile(null)
+    setUserUploadedDocument(null)
+    setUserProcessingResult(null)
+    setIsProcessing(false)
+    setCurrentStep(0)
+    setShowPreview(false)
+    setError(null)
+    setSuccess(null)
+    
+    // Clear the file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
     }
   }
 
@@ -195,6 +428,32 @@ export default function DemoPage() {
             </Link>
             <div className="flex items-center space-x-4">
               <span className="text-sm text-[#E5E7EB]/60">AI-Powered Demo</span>
+              
+              {/* Role Switcher */}
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-[#E5E7EB]/60">Role:</span>
+                <select
+                  value={userId}
+                  onChange={(e) => {
+                    const newUserId = e.target.value
+                    setUserId(newUserId)
+                    setUserRole(newUserId === '1' ? 'admin' : 'user')
+                    clearAllState() // Clear state when switching roles
+                  }}
+                  className="bg-[#1F2937] border border-white/20 rounded-md px-3 py-1 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#60A5FA]"
+                >
+                  <option value="1">Admin (ID: 1)</option>
+                  <option value="2">User (ID: 2)</option>
+                </select>
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                  userRole === 'admin' 
+                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' 
+                    : 'bg-green-500/20 text-green-400 border border-green-500/30'
+                }`}>
+                  {userRole.toUpperCase()}
+                </span>
+              </div>
+              
               <Link href="/" className="text-[#60A5FA] hover:text-[#60A5FA]/80 transition-colors">
                 Back to Home
               </Link>
@@ -211,6 +470,76 @@ export default function DemoPage() {
           </p>
         </div>
 
+        {/* Error Display */}
+        {error && (
+          <div className="mb-8 bg-red-500/20 border border-red-500/30 rounded-xl p-4">
+            <div className="flex items-center space-x-3">
+              <AlertCircle className="w-5 h-5 text-red-400" />
+              <span className="text-red-400">{error}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Success Message */}
+        {success && (
+          <div className="mb-8 bg-green-500/20 border border-green-500/30 rounded-xl p-4">
+            <div className="flex items-center space-x-3">
+              <CheckCircle className="w-5 h-5 text-green-400" />
+              <span className="text-green-400">{success}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Admin Section - Only visible to admins */}
+        {userRole === 'admin' && (
+          <div className="mb-8 bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6">
+            <h2 className="text-xl font-semibold text-white mb-4 flex items-center">
+              <Users className="w-5 h-5 mr-2 text-[#60A5FA]" />
+              Admin Dashboard
+            </h2>
+            
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* System Statistics */}
+              <div className="bg-[#1F2937] rounded-lg p-4">
+                <h3 className="text-lg font-medium text-white mb-3">System Overview</h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-[#E5E7EB]/60">Total Users:</span>
+                    <span className="text-white">2</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#E5E7EB]/60">Total Documents:</span>
+                    <span className="text-white">-</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#E5E7EB]/60">Custom Rules:</span>
+                    <span className="text-white">{customRules.length}</span>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Quick Actions */}
+              <div className="bg-[#1F2937] rounded-lg p-4">
+                <h3 className="text-lg font-medium text-white mb-3">Quick Actions</h3>
+                <div className="space-y-2">
+                  <button 
+                    onClick={() => setShowAdminRuleModal(true)}
+                    className="w-full bg-[#60A5FA] hover:bg-[#60A5FA]/80 text-white px-4 py-2 rounded-md text-sm transition-colors"
+                  >
+                    Create Global Rule
+                  </button>
+                  <button 
+                    onClick={() => setShowAddUserModal(true)}
+                    className="w-full bg-[#10B981] hover:bg-[#10B981]/80 text-white px-4 py-2 rounded-md text-sm transition-colors"
+                  >
+                    Add New User
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="grid lg:grid-cols-2 gap-8">
           {/* Left Column - Upload & Configuration */}
           <div className="space-y-8">
@@ -221,7 +550,7 @@ export default function DemoPage() {
                 Upload NDA Document
               </h2>
               
-              {!uploadedFile ? (
+              {!getCurrentUploadedFile() ? (
                 <div className="border-2 border-dashed border-white/20 rounded-lg p-8 text-center hover:border-[#60A5FA]/40 transition-colors">
                   <input
                     type="file"
@@ -229,6 +558,7 @@ export default function DemoPage() {
                     onChange={handleFileUpload}
                     className="hidden"
                     id="file-upload"
+                    ref={fileInputRef}
                   />
                   <label htmlFor="file-upload" className="cursor-pointer">
                     <Upload className="w-12 h-12 mx-auto mb-4 text-[#60A5FA]" />
@@ -242,13 +572,13 @@ export default function DemoPage() {
                   <div className="flex items-center space-x-3">
                     <FileText className="w-8 h-8 text-[#60A5FA]" />
                     <div className="flex-1">
-                      <p className="font-medium text-white">{uploadedFile.name}</p>
+                      <p className="font-medium text-white">{getCurrentUploadedFile()?.name}</p>
                       <p className="text-sm text-[#E5E7EB]/60">
-                        {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
+                        {getCurrentUploadedFile() ? (getCurrentUploadedFile()!.size / 1024 / 1024).toFixed(2) : 0} MB
                       </p>
                     </div>
                     <button
-                      onClick={() => setUploadedFile(null)}
+                      onClick={() => clearCurrentUploadedFile()}
                       className="text-[#E5E7EB]/60 hover:text-white transition-colors"
                     >
                       ×
@@ -258,47 +588,103 @@ export default function DemoPage() {
               )}
             </div>
 
-            {/* Custom Instructions */}
+            {/* Custom Rules - Only visible to admins */}
+            {userRole === 'admin' && (
+              <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6">
+                <h2 className="text-xl font-semibold text-white mb-4 flex items-center">
+                  <Target className="w-5 h-5 mr-2 text-[#60A5FA]" />
+                  Custom Redlining Rules
+                </h2>
+                
+                <div className="space-y-4">
+                  <div className="flex space-x-3">
+                    <select
+                      value={newRuleCategory}
+                      onChange={(e) => setNewRuleCategory(e.target.value)}
+                      className="flex-1 bg-[#1F2937] border border-white/20 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#60A5FA]"
+                    >
+                      <option value="term">Term Duration</option>
+                      <option value="parties">Parties</option>
+                      <option value="firm">Firm Details</option>
+                      <option value="signature">Signature</option>
+                      <option value="other">Other</option>
+                    </select>
+                    <input
+                      type="text"
+                      value={newRule}
+                      onChange={(e) => setNewRule(e.target.value)}
+                      placeholder="Enter redlining instruction..."
+                      className="flex-1 bg-[#1F2937] border border-white/20 rounded-md px-3 py-2 text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:ring-2 focus:ring-[#60A5FA]"
+                    />
+                    <button
+                      onClick={addCustomRule}
+                      className="bg-[#60A5FA] hover:bg-[#60A5FA]/80 text-white px-4 py-2 rounded-md transition-colors"
+                    >
+                      Add Rule
+                    </button>
+                  </div>
+                  
+                  {/* Display custom rules */}
+                  {customRules.length > 0 && (
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-medium text-[#E5E7EB]/80">Active Rules:</h3>
+                      {customRules.map((rule, index) => (
+                        <div key={index} className="flex items-center justify-between bg-[#1F2937] rounded-lg p-3">
+                          <div className="flex items-center space-x-3">
+                            {getCategoryIcon(rule.category)}
+                            <div>
+                              {rule.name && (
+                                <div className="text-sm font-medium text-white">{rule.name}</div>
+                              )}
+                              <span className="text-sm text-[#E5E7EB]">{rule.instruction}</span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => removeCustomRule(index)}
+                            className="text-red-400 hover:text-red-300 transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Rules Display - Shows custom rules created by admin */}
             <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6">
               <h2 className="text-xl font-semibold text-white mb-4 flex items-center">
-                <Edit3 className="w-5 h-5 mr-2 text-[#60A5FA]" />
-                Custom Redlining Instructions
+                <BookOpen className="w-5 h-5 mr-2 text-[#60A5FA]" />
+                Redlining Rules
               </h2>
               
-              <div className="space-y-4 mb-4">
-                {customRules.map((rule) => (
-                  <div key={rule.id} className="bg-white/5 rounded-lg p-4 border border-white/10">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start space-x-3 flex-1">
-                        {getCategoryIcon(rule.category)}
-                        <span className="text-[#E5E7EB] text-sm">{rule.instruction}</span>
+              <div className="space-y-3">
+                {customRules.length > 0 ? (
+                  customRules.map((rule, index) => (
+                    <div key={index} className="flex items-center space-x-3 bg-[#1F2937] rounded-lg p-3">
+                      {getCategoryIcon(rule.category)}
+                      <div className="flex-1">
+                        {rule.name && (
+                          <div className="text-sm font-medium text-white mb-1">{rule.name}</div>
+                        )}
+                        <span className="text-sm text-[#E5E7EB]">{rule.instruction}</span>
+                        <span className="ml-2 text-xs text-[#E5E7EB]/60">({getCategoryLabel(rule.category)})</span>
                       </div>
-                      <button
-                        onClick={() => removeCustomRule(rule.id)}
-                        className="text-[#E5E7EB]/60 hover:text-red-400 transition-colors ml-2"
-                      >
-                        ×
-                      </button>
                     </div>
+                  ))
+                ) : (
+                  <div className="text-center py-6">
+                    <BookOpen className="w-12 h-12 mx-auto mb-3 text-[#E5E7EB]/40" />
+                    <p className="text-[#E5E7EB]/60">
+                      {userRole === 'admin' 
+                        ? 'No custom rules added yet. Create rules above to customize redlining behavior.'
+                        : 'No redlining rules available. Contact your administrator to set up rules.'
+                      }
+                    </p>
                   </div>
-                ))}
-              </div>
-
-              <div className="flex space-x-2">
-                <input
-                  type="text"
-                  value={newRule}
-                  onChange={(e) => setNewRule(e.target.value)}
-                  placeholder="Add custom instruction..."
-                  className="flex-1 px-3 py-2 bg-white/10 border border-white/20 rounded text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:border-[#60A5FA]"
-                  onKeyPress={(e) => e.key === 'Enter' && addCustomRule()}
-                />
-                <button
-                  onClick={addCustomRule}
-                  className="px-4 py-2 bg-[#60A5FA] hover:bg-[#60A5FA]/90 text-white rounded font-medium transition-colors"
-                >
-                  Add
-                </button>
+                )}
               </div>
             </div>
 
@@ -394,55 +780,15 @@ export default function DemoPage() {
               </div>
             </div>
 
-            {/* Signature Upload */}
-            <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-6">
-              <h2 className="text-xl font-semibold text-white mb-4 flex items-center">
-                <PenTool className="w-5 h-5 mr-2 text-[#60A5FA]" />
-                Digital Signature
-              </h2>
-              
-              {!signatureFile ? (
-                <div className="border-2 border-dashed border-white/20 rounded-lg p-6 text-center hover:border-[#60A5FA]/40 transition-colors">
-                  <input
-                    type="file"
-                    accept=".png,.jpg,.jpeg,.svg"
-                    onChange={handleSignatureUpload}
-                    className="hidden"
-                    id="signature-upload"
-                  />
-                  <label htmlFor="signature-upload" className="cursor-pointer">
-                    <PenTool className="w-8 h-8 mx-auto mb-2 text-[#60A5FA]" />
-                    <p className="text-sm text-[#E5E7EB]/60">Upload signature image</p>
-                  </label>
-                </div>
-              ) : (
-                <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-                  <div className="flex items-center space-x-3">
-                    <PenTool className="w-6 h-6 text-[#60A5FA]" />
-                    <div className="flex-1">
-                      <p className="font-medium text-white">{signatureFile.name}</p>
-                      <p className="text-sm text-[#E5E7EB]/60">Signature uploaded</p>
-                    </div>
-                    <button
-                      onClick={() => setSignatureFile(null)}
-                      className="text-[#E5E7EB]/60 hover:text-white transition-colors"
-                    >
-                      ×
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
             {/* Process Button */}
             <button
               onClick={startProcessing}
-              disabled={!uploadedFile || isProcessing}
+              disabled={!getCurrentUploadedFile() || isProcessing}
               className="w-full bg-[#60A5FA] hover:bg-[#60A5FA]/90 disabled:bg-[#60A5FA]/40 text-white py-4 rounded-lg font-semibold text-lg transition-all duration-200 hover:shadow-lg hover:shadow-[#60A5FA]/25 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
             >
               {isProcessing ? (
                 <>
-                  <Clock className="w-5 h-5 animate-spin" />
+                  <Loader className="w-5 h-5 animate-spin" />
                   <span>AI Processing...</span>
                 </>
               ) : (
@@ -528,31 +874,39 @@ export default function DemoPage() {
                   </div>
                 </div>
                 
-                <div className="space-y-3 text-sm mb-4">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-red-500 rounded-full" />
-                    <span className="text-[#E5E7EB]">Term length reduced to 2 years</span>
+                {getCurrentProcessingResult() && (
+                  <div className="space-y-3 text-sm mb-4">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-3 h-3 bg-red-500 rounded-full" />
+                      <span className="text-[#E5E7EB]">Term length reduced to 2 years</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <div className="w-3 h-3 bg-blue-500 rounded-full" />
+                      <span className="text-[#E5E7EB]">Investors and agents added to parties</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <div className="w-3 h-3 bg-green-500 rounded-full" />
+                      <span className="text-[#E5E7EB]">Firm details and signature inserted</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <div className="w-3 h-3 bg-purple-500 rounded-full" />
+                      <span className="text-[#E5E7EB]">Confidentiality capped at 18 months</span>
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-blue-500 rounded-full" />
-                    <span className="text-[#E5E7EB]">Investors and agents added to parties</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-green-500 rounded-full" />
-                    <span className="text-[#E5E7EB]">Firm details and signature inserted</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-purple-500 rounded-full" />
-                    <span className="text-[#E5E7EB]">Confidentiality capped at 18 months</span>
-                  </div>
-                </div>
+                )}
                 
                 <button
                   onClick={downloadDocument}
-                  className="w-full bg-[#60A5FA] hover:bg-[#60A5FA]/90 text-white py-3 rounded-lg font-medium transition-all duration-200 hover:shadow-lg hover:shadow-[#60A5FA]/25 flex items-center justify-center space-x-2"
+                  disabled={!getCurrentUploadedDocument()?.output_path}
+                  className="w-full bg-[#10B981] hover:bg-[#10B981]/90 disabled:bg-[#10B981]/40 text-white py-3 rounded-lg font-semibold transition-all duration-200 hover:shadow-lg hover:shadow-[#10B981]/25 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
                 >
                   <Download className="w-5 h-5" />
-                  <span>Download Redlined NDA</span>
+                  <span>
+                    {getCurrentUploadedDocument()?.output_path 
+                      ? 'Download Redlined Document' 
+                      : 'No processed document available for download'
+                    }
+                  </span>
                 </button>
               </div>
             )}
@@ -586,7 +940,7 @@ export default function DemoPage() {
                   <span className="text-[#E5E7EB]">Term duration optimization</span>
                 </div>
                 <div className="flex items-center space-x-3">
-                  <Shield className="w-4 h-4 text-[#60A5FA]" />
+                  <Lock className="w-4 h-4 text-[#60A5FA]" />
                   <span className="text-[#E5E7EB]">Liability clause analysis</span>
                 </div>
               </div>
@@ -594,6 +948,174 @@ export default function DemoPage() {
           </div>
         </div>
       </div>
+
+      {/* Admin Rule Creation Modal */}
+      {showAdminRuleModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div ref={adminRuleModalRef} className="bg-[#1F2937] rounded-xl p-6 w-full max-w-md mx-4 border border-white/10">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">Create New Redlining Rule</h3>
+              <button
+                onClick={() => setShowAdminRuleModal(false)}
+                className="text-[#E5E7EB]/60 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-[#E5E7EB]/80 mb-2">
+                  Rule Name
+                </label>
+                <input
+                  type="text"
+                  value={adminRuleName}
+                  onChange={(e) => setAdminRuleName(e.target.value)}
+                  placeholder="Enter rule name..."
+                  className="w-full bg-[#374151] border border-white/20 rounded-md px-3 py-2 text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:ring-2 focus:ring-[#60A5FA]"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-[#E5E7EB]/80 mb-2">
+                  Category
+                </label>
+                <select
+                  value={adminRuleCategory}
+                  onChange={(e) => setAdminRuleCategory(e.target.value)}
+                  className="w-full bg-[#374151] border border-white/20 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#60A5FA]"
+                >
+                  <option value="term">Term Duration</option>
+                  <option value="parties">Parties</option>
+                  <option value="firm">Firm Details</option>
+                  <option value="signature">Signature</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-[#E5E7EB]/80 mb-2">
+                  Redlining Instruction
+                </label>
+                <textarea
+                  value={adminRuleInstruction}
+                  onChange={(e) => setAdminRuleInstruction(e.target.value)}
+                  placeholder="Enter detailed redlining instruction..."
+                  rows={3}
+                  className="w-full bg-[#374151] border border-white/20 rounded-md px-3 py-2 text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:ring-2 focus:ring-[#60A5FA] resize-none"
+                />
+              </div>
+              
+              <div className="flex space-x-3 pt-2">
+                <button
+                  onClick={() => setShowAdminRuleModal(false)}
+                  className="flex-1 bg-[#6B7280] hover:bg-[#6B7280]/80 text-white px-4 py-2 rounded-md transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={createAdminRule}
+                  className="flex-1 bg-[#60A5FA] hover:bg-[#60A5FA]/80 text-white px-4 py-2 rounded-md transition-colors"
+                >
+                  Create Rule
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add User Modal */}
+      {showAddUserModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div ref={addUserModalRef} className="bg-[#1F2937] rounded-xl p-6 w-full max-w-md mx-4 border border-white/10">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">Add New User</h3>
+              <button
+                onClick={() => setShowAddUserModal(false)}
+                className="text-[#E5E7EB]/60 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-[#E5E7EB]/80 mb-2">
+                  Username
+                </label>
+                <input
+                  type="text"
+                  value={newUserData.username}
+                  onChange={(e) => setNewUserData(prev => ({ ...prev, username: e.target.value }))}
+                  placeholder="Enter username..."
+                  className="w-full bg-[#374151] border border-white/20 rounded-md px-3 py-2 text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:ring-2 focus:ring-[#60A5FA]"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-[#E5E7EB]/80 mb-2">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={newUserData.email}
+                  onChange={(e) => setNewUserData(prev => ({ ...prev, email: e.target.value }))}
+                  placeholder="Enter email..."
+                  className="w-full bg-[#374151] border border-white/20 rounded-md px-3 py-2 text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:ring-2 focus:ring-[#60A5FA]"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-[#E5E7EB]/80 mb-2">
+                  Role
+                </label>
+                <select
+                  value={newUserData.role}
+                  onChange={(e) => setNewUserData(prev => ({ ...prev, role: e.target.value }))}
+                  className="w-full bg-[#374151] border border-white/20 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#60A5FA]"
+                >
+                  <option value="USER">Regular User</option>
+                  <option value="ADMIN">Administrator</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-[#E5E7EB]/80 mb-2">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  value={newUserData.password}
+                  onChange={(e) => setNewUserData(prev => ({ ...prev, password: e.target.value }))}
+                  placeholder="Enter password..."
+                  className="w-full bg-[#374151] border border-white/20 rounded-md px-3 py-2 text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:ring-2 focus:ring-[#60A5FA]"
+                />
+              </div>
+              
+              <div className="flex space-x-3 pt-2">
+                <button
+                  onClick={() => setShowAddUserModal(false)}
+                  className="flex-1 bg-[#6B7280] hover:bg-[#6B7280]/80 text-white px-4 py-2 rounded-md transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={addNewUser}
+                  className="flex-1 bg-[#10B981] hover:bg-[#10B981]/80 text-white px-4 py-2 rounded-md transition-colors"
+                >
+                  Create User
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* System Health Modal */}
+      {/* This modal is removed as per the edit hint */}
     </div>
   )
 }
+

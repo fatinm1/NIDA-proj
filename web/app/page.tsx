@@ -54,7 +54,7 @@ export default function LandingPage() {
             </p>
             <div className="flex flex-col sm:flex-row justify-center gap-4">
               <Link href="/demo" className="bg-[#60A5FA] hover:bg-[#60A5FA]/90 text-white px-8 py-4 rounded-lg font-semibold text-lg transition-all duration-200 hover:shadow-lg hover:shadow-[#60A5FA]/25 flex items-center justify-center space-x-2">
-                <span>See 60-second demo</span>
+                <span>Demo</span>
                 <ArrowRight className="w-5 h-5" />
               </Link>
               <Link href="#how-it-works" className="border border-white/20 hover:border-white/40 text-white px-8 py-4 rounded-lg font-medium text-lg transition-all duration-200 hover:bg-white/5">

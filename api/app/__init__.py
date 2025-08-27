@@ -21,12 +21,18 @@ def create_app(config_class=Config):
     # Register blueprints
     from app.routes.health import health_bp
     from app.routes.auth import auth_bp
+    from app.routes.documents import documents_bp
+    from app.routes.rules import rules_bp
+    from app.routes.admin import admin_bp
     
     app.register_blueprint(health_bp)
     app.register_blueprint(auth_bp, url_prefix='/v1/auth')
+    app.register_blueprint(documents_bp, url_prefix='/v1/documents')
+    app.register_blueprint(rules_bp, url_prefix='/v1/rules')
+    app.register_blueprint(admin_bp, url_prefix='/v1/admin')
     
-    # Initialize database
-    with app.app_context():
-        db.create_all()
+    # Don't create tables here - use migrations instead
+    # with app.app_context():
+    #     db.create_all()
     
     return app
