@@ -3,12 +3,15 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5
 export interface Document {
   id: number
   filename: string
-  original_path: string
+  original_filename: string
+  file_path: string
+  file_size: number
   output_path?: string
   status: string
   user_id: number
-  created_at: string
-  updated_at: string
+  uploaded_at: string
+  processed_at?: string
+  error_message?: string
 }
 
 export interface CustomRule {

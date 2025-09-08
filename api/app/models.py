@@ -92,6 +92,7 @@ def define_models(db):
         instruction = db.Column(db.Text, nullable=False)
         category = db.Column(db.String(100), nullable=False)
         is_active = db.Column(db.Boolean, default=True)
+        is_global = db.Column(db.Boolean, default=False, nullable=False)
         created_at = db.Column(db.DateTime, default=datetime.utcnow)
         updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
         
@@ -103,6 +104,7 @@ def define_models(db):
                 'instruction': self.instruction,
                 'category': self.category,
                 'is_active': self.is_active,
+                'is_global': self.is_global,
                 'created_at': self.created_at.isoformat() if self.created_at else None,
                 'updated_at': self.updated_at.isoformat() if self.updated_at else None
             }

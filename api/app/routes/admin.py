@@ -10,15 +10,19 @@ admin_bp = Blueprint('admin', __name__)
 def require_admin(f):
     """Decorator to require admin role"""
     def decorated_function(*args, **kwargs):
-        # For demo purposes, create a mock user based on X-User-ID header
-        user_id = request.headers.get('X-User-ID', '1')
-        if user_id == '1':
-            # Mock admin user
-            class MockUser:
-                id = 1
-                role = 'ADMIN'
-            user = MockUser()
-        else:
+        # Get user ID from header
+        user_id = request.headers.get('X-User-ID')
+        if not user_id:
+            return jsonify({'error': 'User ID required'}), 401
+        
+        # Get user from database
+        User = current_app.User
+        user = User.query.get(int(user_id))
+        
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        if user.role != 'ADMIN':
             return jsonify({'error': 'Admin access required'}), 403
         
         return f(user, *args, **kwargs)

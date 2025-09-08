@@ -108,11 +108,12 @@ export default function UserDashboard() {
       const mockDocument: Document = {
         id: Date.now(),
         filename: file.name,
-        original_path: URL.createObjectURL(file),
+        original_filename: file.name,
+        file_path: URL.createObjectURL(file),
+        file_size: file.size,
         status: 'uploaded',
         user_id: user?.id || 1,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        uploaded_at: new Date().toISOString()
       };
       
       setUploadedDocument(mockDocument);
@@ -377,6 +378,7 @@ export default function UserDashboard() {
                     type="text"
                     value={firmDetails.name}
                     onChange={(e) => updateFirmDetails('name', e.target.value)}
+                    placeholder="Enter your law firm name"
                     className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:border-[#60A5FA]"
                   />
                 </div>
@@ -386,6 +388,7 @@ export default function UserDashboard() {
                     type="text"
                     value={firmDetails.address}
                     onChange={(e) => updateFirmDetails('address', e.target.value)}
+                    placeholder="Enter street address"
                     className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:border-[#60A5FA]"
                   />
                 </div>
@@ -395,6 +398,7 @@ export default function UserDashboard() {
                     type="text"
                     value={firmDetails.city}
                     onChange={(e) => updateFirmDetails('city', e.target.value)}
+                    placeholder="Enter city"
                     className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:border-[#60A5FA]"
                   />
                 </div>
@@ -404,6 +408,7 @@ export default function UserDashboard() {
                     type="text"
                     value={firmDetails.state}
                     onChange={(e) => updateFirmDetails('state', e.target.value)}
+                    placeholder="Enter state (e.g., NY)"
                     className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:border-[#60A5FA]"
                   />
                 </div>
@@ -413,6 +418,7 @@ export default function UserDashboard() {
                     type="text"
                     value={firmDetails.zipCode}
                     onChange={(e) => updateFirmDetails('zipCode', e.target.value)}
+                    placeholder="Enter ZIP code"
                     className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:border-[#60A5FA]"
                   />
                 </div>
@@ -422,6 +428,7 @@ export default function UserDashboard() {
                     type="text"
                     value={firmDetails.signerName}
                     onChange={(e) => updateFirmDetails('signerName', e.target.value)}
+                    placeholder="Enter signer's full name"
                     className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:border-[#60A5FA]"
                   />
                 </div>
@@ -431,6 +438,7 @@ export default function UserDashboard() {
                     type="text"
                     value={firmDetails.signerTitle}
                     onChange={(e) => updateFirmDetails('signerTitle', e.target.value)}
+                    placeholder="Enter signer's title"
                     className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:border-[#60A5FA]"
                   />
                 </div>
@@ -440,6 +448,7 @@ export default function UserDashboard() {
                     type="email"
                     value={firmDetails.email}
                     onChange={(e) => updateFirmDetails('email', e.target.value)}
+                    placeholder="Enter email address"
                     className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:border-[#60A5FA]"
                   />
                 </div>
@@ -449,6 +458,7 @@ export default function UserDashboard() {
                     type="tel"
                     value={firmDetails.phone}
                     onChange={(e) => updateFirmDetails('phone', e.target.value)}
+                    placeholder="Enter phone number"
                     className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:border-[#60A5FA]"
                   />
                 </div>
@@ -571,20 +581,16 @@ export default function UserDashboard() {
                 {processingResult && (
                   <div className="space-y-3 text-sm mb-4">
                     <div className="flex items-center space-x-2">
-                      <div className="w-3 h-3 bg-red-500 rounded-full" />
-                      <span className="text-[#E5E7EB]">Term length reduced to 2 years</span>
+                      <div className="w-3 h-3 bg-green-500 rounded-full" />
+                      <span className="text-[#E5E7EB]">Rules Applied: {processingResult.rules_applied}</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <div className="w-3 h-3 bg-blue-500 rounded-full" />
-                      <span className="text-[#E5E7EB]">Investors and agents added to parties</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <div className="w-3 h-3 bg-green-500 rounded-full" />
-                      <span className="text-[#E5E7EB]">Firm details and signature inserted</span>
+                      <span className="text-[#E5E7EB]">Changes Made: {processingResult.changes_made}</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <div className="w-3 h-3 bg-purple-500 rounded-full" />
-                      <span className="text-[#E5E7EB]">Confidentiality capped at 18 months</span>
+                      <span className="text-[#E5E7EB]">Processing Time: {processingResult.processing_time}</span>
                     </div>
                   </div>
                 )}

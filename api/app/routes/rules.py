@@ -9,22 +9,17 @@ rules_bp = Blueprint('rules', __name__)
 def require_auth(f):
     """Decorator to require authentication"""
     def decorated_function(*args, **kwargs):
-        # For demo purposes, create a mock user based on X-User-ID header
-        user_id = request.headers.get('X-User-ID', '1')
-        if user_id == '1':
-            # Mock admin user
-            class MockUser:
-                id = 1
-                role = 'ADMIN'
-            user = MockUser()
-        elif user_id == '2':
-            # Mock regular user
-            class MockUser:
-                id = 2
-                role = 'USER'
-            user = MockUser()
-        else:
-            return jsonify({'error': 'Unauthorized'}), 401
+        # Get user ID from header
+        user_id = request.headers.get('X-User-ID')
+        if not user_id:
+            return jsonify({'error': 'User ID required'}), 401
+        
+        # Get user from database
+        User = current_app.User
+        user = User.query.get(int(user_id))
+        
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
         
         return f(user, *args, **kwargs)
     decorated_function.__name__ = f.__name__
@@ -33,15 +28,19 @@ def require_auth(f):
 def require_admin(f):
     """Decorator to require admin role"""
     def decorated_function(*args, **kwargs):
-        # For demo purposes, create a mock user based on X-User-ID header
-        user_id = request.headers.get('X-User-ID', '1')
-        if user_id == '1':
-            # Mock admin user
-            class MockUser:
-                id = 1
-                role = 'ADMIN'
-            user = MockUser()
-        else:
+        # Get user ID from header
+        user_id = request.headers.get('X-User-ID')
+        if not user_id:
+            return jsonify({'error': 'User ID required'}), 401
+        
+        # Get user from database
+        User = current_app.User
+        user = User.query.get(int(user_id))
+        
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        if user.role != 'ADMIN':
             return jsonify({'error': 'Admin access required'}), 403
         
         return f(user, *args, **kwargs)
@@ -57,7 +56,7 @@ def list_rules(user):
         # Admin can see all active rules
         rules = ProcessingRule.query.filter_by(is_active=True).all()
     else:
-        # Regular users can only see active rules
+        # Regular users can see all active rules (for viewing)
         rules = ProcessingRule.query.filter_by(is_active=True).all()
     
     return jsonify({
@@ -78,7 +77,8 @@ def create_rule(user):
         name=data['name'],
         instruction=data['instruction'],
         category=data['category'],
-        is_active=True
+        is_active=True,
+        is_global=False  # Rules created by admins are not global by default
     )
     
     db.session.add(rule)

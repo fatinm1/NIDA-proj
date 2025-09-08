@@ -56,6 +56,13 @@ export default function Dashboard() {
 
   // Custom rules state
   const [customRules, setCustomRules] = useState<CustomRule[]>([]);
+  
+  // System statistics state
+  const [systemStats, setSystemStats] = useState<{
+    total_users: number;
+    total_documents: number;
+    total_rules: number;
+  } | null>(null);
 
   // Firm details state
   const [firmDetails, setFirmDetails] = useState<FirmDetails>({
@@ -137,6 +144,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (user && user.role === 'ADMIN') {
       loadExistingRules();
+      loadSystemStats();
     }
   }, [user]);
 
@@ -151,30 +159,37 @@ export default function Dashboard() {
     }
   };
 
+  const loadSystemStats = async () => {
+    try {
+      const response = await apiClient.getAdminDashboard(user?.id?.toString() || '');
+      setSystemStats(response.statistics);
+    } catch (error) {
+      console.error('Error loading system stats:', error);
+      // Keep stats as null to show loading state
+    }
+  };
+
   const handleLogout = () => {
     logout();
     router.push('/');
   };
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       setUploadedFile(file);
       setError(null);
-      setSuccess('Document uploaded successfully!');
       
-      // Create a mock document object
-      const mockDocument: Document = {
-        id: Date.now(),
-        filename: file.name,
-        original_path: URL.createObjectURL(file),
-        status: 'uploaded',
-        user_id: user?.id || 1,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-      
-      setUploadedDocument(mockDocument);
+      try {
+        // Upload file to backend
+        const result = await apiClient.uploadDocument(file, user?.id?.toString() || '');
+        setUploadedDocument(result.document);
+        setSuccess('Document uploaded successfully!');
+      } catch (error) {
+        console.error('Upload error:', error);
+        setError('Failed to upload document. Please try again.');
+        setUploadedFile(null);
+      }
     }
   };
 
@@ -208,19 +223,13 @@ export default function Dashboard() {
       setCurrentStep(4);
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // Mock processing result
-      const result = {
-        success: true,
-        document: {
-          ...uploadedDocument,
-          output_path: `/outputs/processed_${Date.now()}_${uploadedFile.name}`
-        },
-        processing_result: {
-          rules_applied: customRules.length,
-          changes_made: 4,
-          processing_time: '5.5s'
-        }
-      };
+      // Call the real backend API for processing
+      const result = await apiClient.processDocument(
+        uploadedDocument.id,
+        customRules,
+        firmDetails,
+        user?.id?.toString() || ''
+      );
 
       setProcessingResult(result.processing_result);
       setUploadedDocument(result.document);
@@ -228,6 +237,7 @@ export default function Dashboard() {
       setSuccess('Document processed successfully!');
       
     } catch (error) {
+      console.error('Processing error:', error);
       setError('Error processing document. Please try again.');
     } finally {
       setIsProcessing(false);
@@ -236,25 +246,51 @@ export default function Dashboard() {
   };
 
   const downloadDocument = async () => {
-    if (!uploadedDocument?.output_path) {
+    if (!uploadedDocument?.id) {
       setError('No processed document available for download');
       return;
     }
 
     try {
-      // Mock download - in real app this would download the actual file
+      await apiClient.downloadDocument(uploadedDocument.id, user?.id?.toString() || '');
       setSuccess('Document downloaded successfully!');
     } catch (error) {
       setError('Error downloading document. Please try again.');
     }
   };
 
-  const addCustomRule = () => {
-    const newRule: CustomRule = {
-      instruction: '',
-      category: 'other'
-    };
-    setCustomRules([...customRules, newRule]);
+  const addCustomRule = async () => {
+    if (!adminRuleName.trim() || !adminRuleInstruction.trim()) {
+      setError('Rule name and instruction are required');
+      return;
+    }
+
+    try {
+      const newRule = {
+        name: adminRuleName,
+        category: adminRuleCategory,
+        instruction: adminRuleInstruction
+      };
+      
+      
+      // Save rule to backend
+      const response = await apiClient.createRule(newRule, user?.id?.toString() || '');
+      
+      
+      // Add to local state
+      setCustomRules(prev => [...prev, response.rule]);
+      
+      setAdminRuleName('');
+      setAdminRuleInstruction('');
+      setAdminRuleCategory('other');
+      
+      setError(null);
+      setSuccess('Rule created successfully!');
+      
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to create rule');
+    }
   };
 
   const updateCustomRule = async (index: number, field: keyof CustomRule, value: string) => {
@@ -307,11 +343,13 @@ export default function Dashboard() {
         instruction: adminRuleInstruction
       };
       
+      
       // Save rule to backend
       const response = await apiClient.createRule(newRule, user?.id?.toString() || '');
       
+      
       // Add to local state
-      setCustomRules(prev => [...prev, response]);
+      setCustomRules(prev => [...prev, response.rule]);
       
       setAdminRuleName('');
       setAdminRuleInstruction('');
@@ -458,15 +496,15 @@ export default function Dashboard() {
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-[#E5E7EB]/60">Total Users:</span>
-                  <span className="text-white">2</span>
+                  <span className="text-white">{systemStats?.total_users ?? 'Loading...'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[#E5E7EB]/60">Total Documents:</span>
-                  <span className="text-white">-</span>
+                  <span className="text-white">{systemStats?.total_documents ?? 'Loading...'}</span>
               </div>
                 <div className="flex justify-between">
                   <span className="text-[#E5E7EB]/60">Custom Rules:</span>
-                  <span className="text-white">{customRules.length}</span>
+                  <span className="text-white">{systemStats?.total_rules ?? customRules.length}</span>
               </div>
             </div>
           </div>
@@ -568,7 +606,7 @@ export default function Dashboard() {
                     className="flex-1 bg-[#1F2937] border border-white/20 rounded-md px-3 py-2 text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:ring-2 focus:ring-[#60A5FA]"
                   />
                   <button
-                    onClick={addCustomRule}
+                    onClick={() => setShowAdminRuleModal(true)}
                     className="bg-[#60A5FA] hover:bg-[#60A5FA]/80 text-white px-4 py-2 rounded-md transition-colors"
                   >
                     Add Rule
@@ -827,32 +865,28 @@ export default function Dashboard() {
                 {processingResult && (
                   <div className="space-y-3 text-sm mb-4">
                     <div className="flex items-center space-x-2">
-                      <div className="w-3 h-3 bg-red-500 rounded-full" />
-                      <span className="text-[#E5E7EB]">Term length reduced to 2 years</span>
+                      <div className="w-3 h-3 bg-green-500 rounded-full" />
+                      <span className="text-[#E5E7EB]">Rules Applied: {processingResult.rules_applied}</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <div className="w-3 h-3 bg-blue-500 rounded-full" />
-                      <span className="text-[#E5E7EB]">Investors and agents added to parties</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <div className="w-3 h-3 bg-green-500 rounded-full" />
-                      <span className="text-[#E5E7EB]">Firm details and signature inserted</span>
+                      <span className="text-[#E5E7EB]">Changes Made: {processingResult.changes_made}</span>
                       </div>
                     <div className="flex items-center space-x-2">
                       <div className="w-3 h-3 bg-purple-500 rounded-full" />
-                      <span className="text-[#E5E7EB]">Confidentiality capped at 18 months</span>
+                      <span className="text-[#E5E7EB]">Processing Time: {processingResult.processing_time}</span>
                     </div>
                   </div>
                 )}
 
                 <button
                   onClick={downloadDocument}
-                  disabled={!uploadedDocument?.output_path}
+                  disabled={!uploadedDocument?.id}
                   className="w-full bg-[#10B981] hover:bg-[#10B981]/90 disabled:bg-[#10B981]/40 text-white py-3 rounded-lg font-semibold transition-all duration-200 hover:shadow-lg hover:shadow-[#10B981]/25 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
                 >
                   <Download className="w-5 h-5" />
                   <span>
-                    {uploadedDocument?.output_path
+                    {uploadedDocument?.id
                       ? 'Download Redlined Document'
                       : 'No processed document available for download'
                     }
@@ -898,7 +932,7 @@ export default function Dashboard() {
                   <option value="other">Other</option>
                 </select>
               </div>
-              
+
               <div>
                 <label className="block text-sm text-[#E5E7EB]/60 mb-1">Instruction</label>
                 <textarea
@@ -946,7 +980,7 @@ export default function Dashboard() {
                   className="w-full px-3 py-2 bg-[#0B1220] border border-white/20 rounded text-white placeholder-[#E5E7EB]/40 focus:outline-none focus:border-[#60A5FA]"
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm text-[#E5E7EB]/60 mb-1">Email</label>
                 <input
