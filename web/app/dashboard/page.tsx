@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useAuth } from '@/lib/auth-context';
+import { useAuth } from '../../lib/auth-context';
 import { useRouter } from 'next/navigation';
 import { 
   Upload, 
@@ -28,8 +28,8 @@ import {
   Lock,
   Zap
 } from 'lucide-react';
-import { apiClient } from '@/lib/api';
-import { Document, CustomRule, FirmDetails } from '@/lib/api';
+import { apiClient } from '../../lib/api';
+import { Document, CustomRule, FirmDetails } from '../../lib/api';
 
 interface ProcessingStep {
   id: string;

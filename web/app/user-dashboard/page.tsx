@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { useAuth } from '@/lib/auth-context';
+import { useAuth } from '../../lib/auth-context';
 import { useRouter } from 'next/navigation';
 import { 
   Upload, 
@@ -17,7 +17,7 @@ import {
   LogOut,
   Eye
 } from 'lucide-react';
-import { apiClient, CustomRule, FirmDetails, Document } from '@/lib/api';
+import { apiClient, CustomRule, FirmDetails, Document } from '../../lib/api';
 
 interface ProcessingResult {
   rules_applied: number;

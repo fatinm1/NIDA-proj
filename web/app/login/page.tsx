@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { LogIn, Shield, Sparkles, ArrowLeft, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
-import { login } from '@/lib/auth'
-import { useAuth } from '@/lib/auth-context'
+import { login } from '../../lib/auth'
+import { useAuth } from '../../lib/auth-context'
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)

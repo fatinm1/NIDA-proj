@@ -26,8 +26,8 @@ import {
   Lock,
   Zap
 } from 'lucide-react'
-import { apiClient } from '@/lib/api'
-import { Document, CustomRule, FirmDetails } from '@/lib/api'
+import { apiClient } from '../../lib/api'
+import { Document, CustomRule, FirmDetails } from '../../lib/api'
 import Link from 'next/link'
 
 interface ProcessingStep {
