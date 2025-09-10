@@ -108,6 +108,27 @@ RUN echo '#!/bin/bash' > /app/start.sh && \
     echo 'export FLASK_ENV=production' >> /app/start.sh && \
     echo 'export PORT=${PORT:-5001}' >> /app/start.sh && \
     echo '' >> /app/start.sh && \
+    echo '# Create nginx config with correct port' >> /app/start.sh && \
+    echo 'echo "server {" > /etc/nginx/sites-available/default' >> /app/start.sh && \
+    echo 'echo "    listen 80;" >> /etc/nginx/sites-available/default' >> /app/start.sh && \
+    echo 'echo "    server_name _;" >> /etc/nginx/sites-available/default' >> /app/start.sh && \
+    echo 'echo "" >> /etc/nginx/sites-available/default' >> /app/start.sh && \
+    echo 'echo "    location / {" >> /etc/nginx/sites-available/default' >> /app/start.sh && \
+    echo 'echo "        root /app/web/out;" >> /etc/nginx/sites-available/default' >> /app/start.sh && \
+    echo 'echo "        try_files \$uri \$uri.html \$uri/ /index.html;" >> /etc/nginx/sites-available/default' >> /app/start.sh && \
+    echo 'echo "        index index.html;" >> /etc/nginx/sites-available/default' >> /app/start.sh && \
+    echo 'echo "    }" >> /etc/nginx/sites-available/default' >> /app/start.sh && \
+    echo 'echo "" >> /etc/nginx/sites-available/default' >> /app/start.sh && \
+    echo 'echo "    location /v1/ {" >> /etc/nginx/sites-available/default' >> /app/start.sh && \
+    echo 'echo "        proxy_pass http://localhost:$PORT;" >> /etc/nginx/sites-available/default' >> /app/start.sh && \
+    echo 'echo "        proxy_set_header Host \$host;" >> /etc/nginx/sites-available/default' >> /app/start.sh && \
+    echo 'echo "        proxy_set_header X-Real-IP \$remote_addr;" >> /etc/nginx/sites-available/default' >> /app/start.sh && \
+    echo 'echo "        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;" >> /etc/nginx/sites-available/default' >> /app/start.sh && \
+    echo 'echo "        proxy_set_header X-Forwarded-Proto \$scheme;" >> /etc/nginx/sites-available/default' >> /app/start.sh && \
+    echo 'echo "    }" >> /etc/nginx/sites-available/default' >> /app/start.sh && \
+    echo 'echo "}" >> /etc/nginx/sites-available/default' >> /app/start.sh && \
+    echo 'ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default' >> /app/start.sh && \
+    echo '' >> /app/start.sh && \
     echo '# Start Flask backend in background' >> /app/start.sh && \
     echo 'echo "Starting Flask backend on port $PORT..."' >> /app/start.sh && \
     echo 'cd /app && python run.py &' >> /app/start.sh && \
