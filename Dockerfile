@@ -13,6 +13,9 @@ RUN npm ci
 # Copy frontend source code
 COPY web/ ./
 
+# Ensure public directory exists
+RUN mkdir -p public
+
 # Build frontend for production
 RUN npm run build
 
