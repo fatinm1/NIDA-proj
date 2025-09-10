@@ -13,6 +13,12 @@ if __name__ == '__main__':
             print("Database migrations completed successfully!")
         except Exception as e:
             print(f"Migration error (this might be normal on first run): {e}")
+            print("Attempting to create tables directly...")
+            try:
+                db.create_all()
+                print("Database tables created successfully!")
+            except Exception as create_error:
+                print(f"Failed to create tables: {create_error}")
     
     # Get port from environment variable (Railway sets this)
     port = int(os.environ.get('PORT', 5001))

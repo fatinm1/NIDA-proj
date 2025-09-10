@@ -59,6 +59,10 @@ COPY --from=backend-builder /usr/local/bin /usr/local/bin
 # Copy backend source code
 COPY api/ ./
 
+# Ensure migration files are present
+RUN ls -la /app/migrations/ || echo "No migrations directory found"
+RUN ls -la /app/alembic.ini || echo "No alembic.ini found"
+
 # Copy built frontend from builder
 COPY --from=frontend-builder /app/web/out ./web/out
 COPY --from=frontend-builder /app/web/.next ./web/.next
