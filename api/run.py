@@ -8,7 +8,8 @@ if __name__ == '__main__':
     with app.app_context():
         try:
             print("Running database migrations...")
-            migrate.upgrade()
+            from flask_migrate import upgrade
+            upgrade()
             print("Database migrations completed successfully!")
         except Exception as e:
             print(f"Migration error (this might be normal on first run): {e}")
