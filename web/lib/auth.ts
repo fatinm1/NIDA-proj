@@ -25,7 +25,8 @@ export interface RegisterData {
 }
 
 export async function login(credentials: LoginCredentials): Promise<AuthResponse> {
-  const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/v1/auth/login`, {
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5001');
+  const response = await fetch(`${API_BASE_URL}/v1/auth/login`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -43,7 +44,8 @@ export async function login(credentials: LoginCredentials): Promise<AuthResponse
 }
 
 export async function register(data: RegisterData): Promise<AuthResponse> {
-  const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/v1/auth/register`, {
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5001');
+  const response = await fetch(`${API_BASE_URL}/v1/auth/register`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -62,7 +64,8 @@ export async function register(data: RegisterData): Promise<AuthResponse> {
 
 export async function getCurrentUser(): Promise<User | null> {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/v1/auth/me`, {
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5001');
+    const response = await fetch(`${API_BASE_URL}/v1/auth/me`, {
       credentials: 'include',
     })
     
@@ -79,7 +82,8 @@ export async function getCurrentUser(): Promise<User | null> {
 
 export async function logout(): Promise<void> {
   try {
-    await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/v1/auth/logout`, {
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5001');
+    await fetch(`${API_BASE_URL}/v1/auth/logout`, {
       method: 'POST',
       credentials: 'include',
     })
