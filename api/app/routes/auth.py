@@ -7,14 +7,15 @@ from functools import wraps
 auth_bp = Blueprint('auth', __name__)
 
 def create_tokens(user_id):
+    secret_key = current_app.config.get('JWT_SECRET_KEY', 'fallback-secret-key')
     access_token = jwt.encode(
         {'user_id': user_id, 'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)},
-        'your-secret-key',  # Use config in production
+        secret_key,
         algorithm='HS256'
     )
     refresh_token = jwt.encode(
         {'user_id': user_id, 'exp': datetime.datetime.utcnow() + datetime.timedelta(days=30)},
-        'your-secret-key',  # Use config in production
+        secret_key,
         algorithm='HS256'
     )
     return access_token, refresh_token
@@ -94,7 +95,8 @@ def refresh():
         return jsonify({'error': 'Refresh token required'}), 401
     
     try:
-        payload = jwt.decode(refresh_token, 'your-secret-key', algorithms=['HS256'])
+        secret_key = current_app.config.get('JWT_SECRET_KEY', 'fallback-secret-key')
+        payload = jwt.decode(refresh_token, secret_key, algorithms=['HS256'])
         user_id = payload['user_id']
         
         access_token, new_refresh_token = create_tokens(user_id)
@@ -117,7 +119,8 @@ def me():
         return jsonify({'error': 'Access token required'}), 401
     
     try:
-        payload = jwt.decode(access_token, 'your-secret-key', algorithms=['HS256'])
+        secret_key = current_app.config.get('JWT_SECRET_KEY', 'fallback-secret-key')
+        payload = jwt.decode(access_token, secret_key, algorithms=['HS256'])
         User = current_app.User
         user = User.query.get(payload['user_id'])
         

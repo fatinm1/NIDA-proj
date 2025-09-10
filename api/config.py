@@ -16,7 +16,7 @@ class Config:
     print(f"DEBUG: Final SQLALCHEMY_DATABASE_URI: {SQLALCHEMY_DATABASE_URI}")
     
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    JWT_SECRET_KEY = os.environ.get('JWT_SECRET')
+    JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or os.environ.get('JWT_SECRET') or 'dev-secret-key-change-in-production'
     JWT_ACCESS_TOKEN_EXPIRES = 3600  # 1 hour
     JWT_REFRESH_TOKEN_EXPIRES = 2592000  # 30 days
     CORS_ORIGINS = [os.environ.get('CORS_ORIGIN', 'http://localhost:3000')]
