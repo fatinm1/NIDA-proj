@@ -141,6 +141,44 @@ def admin_dashboard(user):
         }
     })
 
+@admin_bp.route('/create-admin', methods=['POST'])
+def create_admin():
+    """Create the first admin user (no authentication required)"""
+    data = request.get_json()
+    
+    if not data or not data.get('email') or not data.get('password'):
+        return jsonify({'error': 'Email and password required'}), 400
+    
+    User = current_app.User
+    
+    # Check if any admin already exists
+    existing_admin = User.query.filter_by(role='ADMIN').first()
+    if existing_admin:
+        return jsonify({'error': 'Admin user already exists'}), 409
+    
+    # Check if user already exists
+    existing_user = User.query.filter_by(email=data['email']).first()
+    if existing_user:
+        return jsonify({'error': 'Email already registered'}), 409
+    
+    # Create admin user
+    admin_user = User(email=data['email'])
+    admin_user.set_password(data['password'])
+    admin_user.role = 'ADMIN'
+    admin_user.is_active = True
+    
+    try:
+        db.session.add(admin_user)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Admin user created successfully',
+            'user': admin_user.to_dict()
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Failed to create admin: {str(e)}'}), 500
+
 @admin_bp.route('/system-health', methods=['GET'])
 @require_admin
 def system_health(user):
