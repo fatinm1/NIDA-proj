@@ -79,6 +79,21 @@ def upload_document(user):
     if not file:
         return jsonify({'error': 'Invalid file'}), 400
     
+    # Check file size before processing
+    file.seek(0, 2)  # Seek to end
+    file_size = file.tell()
+    file.seek(0)  # Reset to beginning
+    
+    # Check if file is too large (50MB limit)
+    max_size = 50 * 1024 * 1024  # 50MB
+    if file_size > max_size:
+        return jsonify({
+            'error': 'File too large',
+            'message': f'File size ({file_size} bytes) exceeds the maximum allowed limit of 50MB',
+            'max_size': '50MB',
+            'current_size': f'{file_size} bytes'
+        }), 413
+    
     # Generate unique filename
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     unique_id = str(uuid.uuid4())[:8]

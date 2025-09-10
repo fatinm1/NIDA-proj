@@ -23,3 +23,8 @@ class Config:
     
     # Mock OpenAI key for development
     OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY') or 'mock-key-for-development'
+    
+    # File upload configuration
+    MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB max file size
+    UPLOAD_FOLDER = 'uploads'
+    OUTPUT_FOLDER = 'outputs'

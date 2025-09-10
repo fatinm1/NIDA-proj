@@ -1,4 +1,4 @@
-from flask import Flask, send_from_directory, send_file
+from flask import Flask, send_from_directory, send_file, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_cors import CORS
@@ -11,6 +11,9 @@ migrate = Migrate()
 def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
+    
+    # Configure file upload limits
+    app.config['MAX_CONTENT_LENGTH'] = config_class.MAX_CONTENT_LENGTH
     
     # Initialize extensions
     db.init_app(app)
@@ -63,6 +66,15 @@ def create_app(config_class=Config):
         
         # For SPA routing, serve index.html for any non-API route
         return send_file(os.path.join(app.root_path, '..', 'web', 'out', 'index.html'))
+    
+    # Error handler for file too large
+    @app.errorhandler(413)
+    def too_large(e):
+        return jsonify({
+            'error': 'File too large',
+            'message': 'File size exceeds the maximum allowed limit of 50MB',
+            'max_size': '50MB'
+        }), 413
     
     # Don't create tables here - use migrations instead
     # with app.app_context():

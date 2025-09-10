@@ -24,4 +24,9 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
     # Disable debug in production
     debug = os.environ.get('FLASK_ENV') != 'production'
+    
+    # Configure for larger file uploads
+    app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB
+    app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0  # Disable caching for uploaded files
+    
     app.run(host='0.0.0.0', port=port, debug=debug)
