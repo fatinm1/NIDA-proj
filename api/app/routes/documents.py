@@ -89,10 +89,28 @@ def upload_document(user):
     os.makedirs(upload_dir, exist_ok=True)
     
     file_path = os.path.join(upload_dir, filename)
-    file.save(file_path)
     
-    # Get file size
-    file_size = os.path.getsize(file_path)
+    # Save file with proper error handling
+    try:
+        file.save(file_path)
+        
+        # Verify file was saved correctly
+        if not os.path.exists(file_path):
+            raise Exception("File was not saved successfully")
+        
+        # Get file size
+        file_size = os.path.getsize(file_path)
+        
+        # Validate file size matches what we expect
+        if file_size == 0:
+            raise Exception("Uploaded file is empty")
+        
+        # Log file details for debugging
+        logger.info(f"File uploaded successfully: {filename}, size: {file_size} bytes")
+        
+    except Exception as e:
+        logger.error(f"Error saving file: {str(e)}")
+        return jsonify({'error': f'Failed to save file: {str(e)}'}), 500
     
     # Create document record
     Document = current_app.Document
@@ -151,7 +169,12 @@ def process_document(user, document_id):
             test_doc = DocxDocument(document.file_path)
             # If we get here, the file is valid
             test_doc = None  # Close the test document
+            logger.info(f"Document validation successful: {document.file_path}")
         except Exception as e:
+            logger.error(f"Document validation failed: {str(e)}")
+            logger.error(f"File path: {document.file_path}")
+            logger.error(f"File exists: {os.path.exists(document.file_path)}")
+            logger.error(f"File size: {os.path.getsize(document.file_path) if os.path.exists(document.file_path) else 'N/A'}")
             raise Exception(f"Invalid .docx file: {str(e)}")
         
         # Import AI service
