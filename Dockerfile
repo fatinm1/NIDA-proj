@@ -87,14 +87,30 @@ RUN echo 'server { \
 }' > /etc/nginx/sites-available/default
 
 # Create startup script
-RUN echo '#!/bin/bash \
-set -e \
-\
-# Start Flask backend in background \
-cd /app && python run.py & \
-\
-# Start nginx in foreground \
-nginx -g "daemon off;"' > /app/start.sh && chmod +x /app/start.sh
+RUN echo '#!/bin/bash' > /app/start.sh && \
+    echo 'set -e' >> /app/start.sh && \
+    echo '' >> /app/start.sh && \
+    echo '# Debug information' >> /app/start.sh && \
+    echo 'echo "Starting NDA Redlining Application..."' >> /app/start.sh && \
+    echo 'echo "Current directory: $(pwd)"' >> /app/start.sh && \
+    echo 'echo "Python version: $(python --version)"' >> /app/start.sh && \
+    echo '' >> /app/start.sh && \
+    echo '# Set environment variables' >> /app/start.sh && \
+    echo 'export FLASK_ENV=production' >> /app/start.sh && \
+    echo 'export PORT=${PORT:-5001}' >> /app/start.sh && \
+    echo '' >> /app/start.sh && \
+    echo '# Start Flask backend in background' >> /app/start.sh && \
+    echo 'echo "Starting Flask backend on port $PORT..."' >> /app/start.sh && \
+    echo 'cd /app && python run.py &' >> /app/start.sh && \
+    echo '' >> /app/start.sh && \
+    echo '# Wait a moment for Flask to start' >> /app/start.sh && \
+    echo 'sleep 5' >> /app/start.sh && \
+    echo 'echo "Flask backend started"' >> /app/start.sh && \
+    echo '' >> /app/start.sh && \
+    echo '# Start nginx in foreground' >> /app/start.sh && \
+    echo 'echo "Starting nginx..."' >> /app/start.sh && \
+    echo 'nginx -g "daemon off;"' >> /app/start.sh && \
+    chmod +x /app/start.sh
 
 # Expose port 80
 EXPOSE 80
