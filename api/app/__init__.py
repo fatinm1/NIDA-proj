@@ -1,8 +1,9 @@
-from flask import Flask
+from flask import Flask, send_from_directory, send_file
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_cors import CORS
 from config import Config
+import os
 
 db = SQLAlchemy()
 migrate = Migrate()
@@ -43,6 +44,25 @@ def create_app(config_class=Config):
     app.register_blueprint(documents_bp, url_prefix='/v1/documents')
     app.register_blueprint(rules_bp, url_prefix='/v1/rules')
     app.register_blueprint(admin_bp, url_prefix='/v1/admin')
+    
+    # Serve frontend static files
+    @app.route('/')
+    def serve_frontend():
+        return send_file(os.path.join(app.root_path, '..', 'web', 'out', 'index.html'))
+    
+    @app.route('/<path:path>')
+    def serve_static(path):
+        # Handle API routes
+        if path.startswith('v1/'):
+            return "API route not found", 404
+        
+        # Serve static files
+        static_path = os.path.join(app.root_path, '..', 'web', 'out', path)
+        if os.path.exists(static_path) and os.path.isfile(static_path):
+            return send_file(static_path)
+        
+        # For SPA routing, serve index.html for any non-API route
+        return send_file(os.path.join(app.root_path, '..', 'web', 'out', 'index.html'))
     
     # Don't create tables here - use migrations instead
     # with app.app_context():
