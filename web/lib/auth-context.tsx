@@ -24,36 +24,31 @@ export function AuthProvider({ children }: { ReactNode }) {
     if (storedUser) {
       setUser(storedUser)
       setIsAuthenticated(true)
-      
-      // Validate with backend
-      if (process.env.NEXT_PUBLIC_API_BASE_URL) {
-        getCurrentUser()
-          .then(currentUser => {
-            if (currentUser) {
-              setUser(currentUser)
-              storeUser(currentUser)
-            } else {
-              // Invalid user, clear
-              removeStoredUser()
-              setUser(null)
-              setIsAuthenticated(false)
-            }
-          })
-          .catch(() => {
-            // Error, clear
-            removeStoredUser()
-            setUser(null)
-            setIsAuthenticated(false)
-          })
-          .finally(() => {
-            setLoading(false)
-          })
-      } else {
-        setLoading(false)
-      }
-    } else {
-      setLoading(false)
     }
+    
+    // Always validate with backend to check JWT tokens
+    getCurrentUser()
+      .then(currentUser => {
+        if (currentUser) {
+          setUser(currentUser)
+          storeUser(currentUser)
+          setIsAuthenticated(true)
+        } else {
+          // Invalid user, clear
+          removeStoredUser()
+          setUser(null)
+          setIsAuthenticated(false)
+        }
+      })
+      .catch(() => {
+        // Error, clear
+        removeStoredUser()
+        setUser(null)
+        setIsAuthenticated(false)
+      })
+      .finally(() => {
+        setLoading(false)
+      })
   }, [])
 
   const login = (userData: User) => {
@@ -62,7 +57,17 @@ export function AuthProvider({ children }: { ReactNode }) {
     storeUser(userData)
   }
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      // Call backend logout to clear httpOnly cookies
+      await fetch('/v1/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+      })
+    } catch (error) {
+      // Ignore logout errors
+    }
+    
     setUser(null)
     setIsAuthenticated(false)
     removeStoredUser()
