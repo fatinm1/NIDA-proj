@@ -457,4 +457,4 @@ class DocumentProcessor:
         name, ext = os.path.splitext(filename)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_filename = f"{name}_redlined_{timestamp}{ext}"
-        return os.path.join(base_dir, output_filename)
+        return os.path.abspath(os.path.join(base_dir, output_filename))

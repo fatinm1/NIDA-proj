@@ -88,7 +88,8 @@ def upload_document(user):
     upload_dir = 'uploads'
     os.makedirs(upload_dir, exist_ok=True)
     
-    file_path = os.path.join(upload_dir, filename)
+    # Use absolute path to avoid issues in Railway
+    file_path = os.path.abspath(os.path.join(upload_dir, filename))
     
     # Save file with proper error handling
     try:
