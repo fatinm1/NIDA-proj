@@ -284,7 +284,10 @@ class DocumentProcessor:
             modifications = ai_result['redlining_instructions']
             if isinstance(modifications, dict) and 'modifications' in modifications:
                 modifications = modifications['modifications']
-            self._apply_modifications(doc, modifications)
+            
+            # Apply modifications if we have any
+            if modifications:
+                self._apply_modifications(doc, modifications)
             
             # Apply firm details
             self._apply_firm_details(doc, firm_details)
@@ -292,14 +295,17 @@ class DocumentProcessor:
             # Generate output path
             output_path = self._generate_output_path(doc_path)
             
+            # Ensure output directory exists
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            
             # Save the modified document
             doc.save(output_path)
             
             return {
                 'success': True,
                 'output_path': output_path,
-                'modifications_applied': len(modifications),
-                'ai_analysis': ai_result['ai_analysis']
+                'modifications_applied': len(modifications) if modifications else 0,
+                'ai_analysis': ai_result.get('ai_analysis', 'No analysis available')
             }
             
         except Exception as e:
@@ -441,8 +447,12 @@ class DocumentProcessor:
     
     def _generate_output_path(self, input_path: str) -> str:
         """Generate output path for the processed document"""
-        # Get the absolute path to the uploads directory
-        base_dir = os.path.abspath('uploads')
+        # Create outputs directory if it doesn't exist
+        output_dir = 'outputs'
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Get the absolute path to the outputs directory
+        base_dir = os.path.abspath(output_dir)
         filename = os.path.basename(input_path)
         name, ext = os.path.splitext(filename)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

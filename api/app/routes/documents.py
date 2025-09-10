@@ -135,6 +135,25 @@ def process_document(user, document_id):
     db.session.commit()
     
     try:
+        # Validate file exists and is readable
+        if not os.path.exists(document.file_path):
+            raise Exception(f"Document file not found: {document.file_path}")
+        
+        # Check file size
+        file_size = os.path.getsize(document.file_path)
+        if file_size == 0:
+            raise Exception("Document file is empty")
+        
+        # Validate file is a valid .docx file
+        try:
+            from docx import Document as DocxDocument
+            # Try to open the document to validate it's a proper .docx file
+            test_doc = DocxDocument(document.file_path)
+            # If we get here, the file is valid
+            test_doc = None  # Close the test document
+        except Exception as e:
+            raise Exception(f"Invalid .docx file: {str(e)}")
+        
         # Import AI service
         from app.services.ai_redlining import AIRedliningService, DocumentProcessor
         
@@ -143,9 +162,13 @@ def process_document(user, document_id):
         
         # Extract text from Word document
         try:
-            from docx import Document as DocxDocument
             doc = DocxDocument(document.file_path)
             document_text = '\n'.join([paragraph.text for paragraph in doc.paragraphs])
+            
+            # Validate we extracted some text
+            if not document_text.strip():
+                raise Exception("No text content found in document")
+                
         except Exception as e:
             # Fallback: try to read as text file
             try:
