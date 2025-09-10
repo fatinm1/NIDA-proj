@@ -155,20 +155,15 @@ def process_document(user, document_id):
                 # If all else fails, create a basic text representation
                 document_text = f"Document: {document.original_filename}\nFile size: {document.file_size} bytes\nProcessing timestamp: {datetime.utcnow()}"
         
-        # Process document with AI
-        result = ai_service.analyze_document(document_text, custom_rules)
+        # Process document with AI and apply modifications
+        processor = DocumentProcessor(ai_service)
+        result = processor.process_document(document.file_path, custom_rules, firm_details)
         
         if not result.get('success'):
-            raise Exception(result.get('error', 'AI analysis failed'))
+            raise Exception(result.get('error', 'Document processing failed'))
         
-        # Generate output path for processed document
-        output_filename = f"processed_{document.filename}"
-        output_path = os.path.abspath(os.path.join('outputs', output_filename))
-        os.makedirs('outputs', exist_ok=True)
-        
-        # For now, just copy the original file as processed (in real implementation, apply AI changes)
-        import shutil
-        shutil.copy2(document.file_path, output_path)
+        # Get the output path from the processor
+        output_path = result.get('output_path')
         
         # Update document status
         document.status = 'completed'

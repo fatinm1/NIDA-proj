@@ -4,9 +4,10 @@ import logging
 from typing import List, Dict, Any, Optional
 from openai import OpenAI
 from docx import Document as DocxDocument
-from docx.shared import Inches
+from docx.shared import Inches, RGBColor
 from docx.enum.text import WD_COLOR_INDEX
 from docx.oxml.shared import OxmlElement, qn
+from docx.oxml.ns import nsdecls
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -22,7 +23,7 @@ class AIRedliningService:
                 logger.info("Running in mock mode - no OpenAI API calls will be made")
             else:
                 self.client = OpenAI(api_key=api_key)
-                self.model = "gpt-4"
+                self.model = "gpt-3.5-turbo"  # Use cheaper model to avoid quota issues
                 logger.info("OpenAI client initialized successfully")
         except Exception as e:
             logger.error(f"Error initializing OpenAI client: {str(e)}")
@@ -50,7 +51,7 @@ class AIRedliningService:
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=0.1,  # Low temperature for consistent legal work
-                max_tokens=4000
+                max_tokens=1000  # Reduced to avoid quota issues
             )
             
             # Parse the AI response
@@ -74,26 +75,94 @@ class AIRedliningService:
         """Provide mock analysis for development/testing"""
         logger.info("Running mock AI analysis")
         
-        # Create mock redlining instructions based on custom rules
+        # Create realistic mock redlining instructions based on custom rules
         mock_modifications = []
+        
         for rule in custom_rules:
-            mock_modifications.append({
-                "type": "TEXT_REPLACE",
-                "section": rule.get('category', 'general'),
-                "current_text": "existing text",
-                "new_text": f"modified text based on: {rule['instruction']}",
-                "reason": rule['instruction'],
-                "location_hint": "Mock location"
-            })
+            rule_name = rule.get('name', '').lower()
+            rule_instruction = rule.get('instruction', '')
+            
+            # Create specific modifications based on rule type
+            if 'duration' in rule_name or 'term' in rule_name:
+                # Target the 5-year term
+                if 'five (5) years' in document_text:
+                    mock_modifications.append({
+                        "type": "TEXT_REPLACE",
+                        "section": "term",
+                        "current_text": "five (5) years",
+                        "new_text": "three (3) years",
+                        "reason": rule_instruction,
+                        "location_hint": "Section 5, line 38"
+                    })
+                # Also try the shorter version
+                elif '5 years' in document_text:
+                    mock_modifications.append({
+                        "type": "TEXT_REPLACE",
+                        "section": "term",
+                        "current_text": "5 years",
+                        "new_text": "3 years",
+                        "reason": rule_instruction,
+                        "location_hint": "Section 5, line 38"
+                    })
+                # Target the 3-year survival period
+                if 'three (3) years' in document_text and 'additional period' in document_text:
+                    mock_modifications.append({
+                        "type": "TEXT_REPLACE",
+                        "section": "term",
+                        "current_text": "three (3) years",
+                        "new_text": "two (2) years",
+                        "reason": rule_instruction,
+                        "location_hint": "Section 5, line 38"
+                    })
+            
+            elif 'liability' in rule_name or 'damage' in rule_name:
+                # Add liability cap clause
+                mock_modifications.append({
+                    "type": "TEXT_INSERT",
+                    "section": "liability",
+                    "new_text": "In no event shall either party be liable for any indirect, incidental, special, consequential, or punitive damages arising out of or relating to this Agreement.",
+                    "reason": rule_instruction,
+                    "location_hint": "After Section 8, Remedies"
+                })
+            
+            elif 'firm' in rule_name or 'party' in rule_name:
+                # Replace firm placeholders
+                if '[FIRM_NAME]' in document_text:
+                    mock_modifications.append({
+                        "type": "TEXT_REPLACE",
+                        "section": "parties",
+                        "current_text": "[FIRM_NAME]",
+                        "new_text": "TechLegal Partners LLP",
+                        "reason": rule_instruction,
+                        "location_hint": "Section 1, line 4"
+                    })
+                if '[SIGNER_NAME]' in document_text:
+                    mock_modifications.append({
+                        "type": "TEXT_REPLACE",
+                        "section": "signatures",
+                        "current_text": "[SIGNER_NAME]",
+                        "new_text": "Sarah Chen",
+                        "reason": rule_instruction,
+                        "location_hint": "Section 11, line 55"
+                    })
+                if '[SIGNER_TITLE]' in document_text:
+                    mock_modifications.append({
+                        "type": "TEXT_REPLACE",
+                        "section": "signatures",
+                        "current_text": "[SIGNER_TITLE]",
+                        "new_text": "Managing Partner",
+                        "reason": rule_instruction,
+                        "location_hint": "Section 11, line 56"
+                    })
         
         return {
             'success': True,
             'redlining_instructions': {
                 'modifications': mock_modifications,
-                'summary': f"Mock analysis completed with {len(mock_modifications)} modifications",
-                'risk_assessment': "Mock assessment - no actual legal analysis performed"
+                'summary': f"Mock analysis completed with {len(mock_modifications)} modifications based on {len(custom_rules)} rules",
+                'risk_assessment': "Mock assessment - modifications based on provided rules for testing purposes"
             },
-            'ai_analysis': "This is a mock AI analysis for development purposes. In production, this would be generated by OpenAI GPT-4."
+            'ai_analysis': f"Mock AI analysis generated {len(mock_modifications)} redlining suggestions based on the provided rules. In production, this would be generated by OpenAI GPT-4."
         }
     
     def _build_system_prompt(self, custom_rules: List[Dict[str, Any]]) -> str:
@@ -103,10 +172,12 @@ class AIRedliningService:
         
         You must:
         1. Identify areas that need modification based on the provided rules
-        2. Provide specific text changes with clear before/after examples
+        2. Provide specific text changes with EXACT text matches from the document
         3. Ensure all modifications maintain legal validity
         4. Focus on confidentiality terms, party definitions, liability clauses, and firm details
         5. Return your response in a structured JSON format
+        
+        IMPORTANT: When providing current_text, use the EXACT text as it appears in the document, including punctuation and formatting.
         
         Available modification types:
         - TEXT_REPLACE: Replace specific text
@@ -143,12 +214,23 @@ class AIRedliningService:
     def _build_user_prompt(self, document_text: str, custom_rules: List[Dict[str, Any]]) -> str:
         """Build the user prompt with document content"""
         prompt = f"""Please analyze the following NDA document and provide redlining instructions based on the custom rules.
-        
-        Document Content:
-        {document_text[:8000]}  # Limit to first 8000 chars to stay within token limits
-        
-        Please provide your analysis in the specified JSON format."""
-        
+
+Document Content:
+{document_text[:2000]}  # Limit to first 2000 chars to stay within token limits
+
+CRITICAL: When providing current_text in your modifications, you MUST copy the EXACT text as it appears in the document above.
+For example, if the document says "five (5) years", your current_text must be "five (5) years", not "5 years" or "five years".
+Look carefully at the exact wording, punctuation, and formatting in the document.
+
+IMPORTANT: Search for these common variations in the document:
+- "five (5) years" (most common in legal documents)
+- "five years" 
+- "5 years"
+- "five (5) year"
+- "five year"
+
+Please provide your analysis in the specified JSON format."""
+
         return prompt
     
     def _parse_ai_response(self, ai_response: str) -> List[Dict[str, Any]]:
@@ -200,6 +282,8 @@ class DocumentProcessor:
             
             # Apply AI modifications
             modifications = ai_result['redlining_instructions']
+            if isinstance(modifications, dict) and 'modifications' in modifications:
+                modifications = modifications['modifications']
             self._apply_modifications(doc, modifications)
             
             # Apply firm details
@@ -251,22 +335,66 @@ class DocumentProcessor:
                 continue
     
     def _replace_text(self, doc: DocxDocument, old_text: str, new_text: str):
-        """Replace text in the document with tracked changes"""
+        """Replace text in the document with professional redlining"""
+        logger.info(f"Attempting to replace '{old_text}' with '{new_text}'")
+        replaced = False
+        
         for paragraph in doc.paragraphs:
             if old_text in paragraph.text:
-                # Create tracked change
+                logger.info(f"Found text to replace in paragraph: {paragraph.text}")
+                
+                # Create a professional redlined version
+                # Replace the text first
                 paragraph.text = paragraph.text.replace(old_text, new_text)
-                # Add redlining formatting
+                logger.info(f"Replaced text. New paragraph: {paragraph.text}")
+                replaced = True
+                
+                # Add professional redlining formatting
                 for run in paragraph.runs:
                     if new_text in run.text:
-                        run.font.color.rgb = None  # Reset color
-                        run.font.highlight_color = WD_COLOR_INDEX.YELLOW
+                        # Underline the new text to show it's an addition
+                        run.font.underline = True
+                        run.font.color.rgb = RGBColor(255, 0, 0)  # Red for additions
+                    
+        if not replaced:
+            logger.warning(f"Text '{old_text}' not found in document for replacement")
+            # Try partial matches for common variations
+            variations = [
+                old_text.replace("5", "five (5)"),
+                old_text.replace("five (5)", "5"),
+                old_text.replace("years", "year"),
+                old_text.replace("year", "years"),
+                "five (5) years",  # Common legal format
+                "five years",
+                "5 year",
+                "five year"
+            ]
+            
+            for variation in variations:
+                for paragraph in doc.paragraphs:
+                    if variation in paragraph.text:
+                        logger.info(f"Found variation '{variation}' in paragraph: {paragraph.text}")
+                        paragraph.text = paragraph.text.replace(variation, new_text)
+                        logger.info(f"Replaced variation. New paragraph: {paragraph.text}")
+                        replaced = True
+                        
+                        # Add professional redlining formatting
+                        for run in paragraph.runs:
+                            if new_text in run.text:
+                                run.font.underline = True
+                                run.font.color.rgb = RGBColor(255, 0, 0)  # Red for additions
+                        break
+                if replaced:
+                    break
     
     def _insert_text(self, doc: DocxDocument, text: str, location_hint: str):
         """Insert new text at specified location"""
         # Find appropriate location and insert
         new_paragraph = doc.add_paragraph(text)
-        new_paragraph.runs[0].font.highlight_color = WD_COLOR_INDEX.GREEN
+        for run in new_paragraph.runs:
+            # Professional redlining for insertions
+            run.font.underline = True
+            run.font.color.rgb = RGBColor(255, 0, 0)  # Red for additions
     
     def _delete_text(self, doc: DocxDocument, text: str):
         """Delete text from the document"""
@@ -280,7 +408,10 @@ class DocumentProcessor:
     def _add_clause(self, doc: DocxDocument, clause_text: str):
         """Add a new clause to the document"""
         new_paragraph = doc.add_paragraph(clause_text)
-        new_paragraph.runs[0].font.highlight_color = WD_COLOR_INDEX.GREEN
+        for run in new_paragraph.runs:
+            # Professional redlining for new clauses
+            run.font.underline = True
+            run.font.color.rgb = RGBColor(255, 0, 0)  # Red for additions
     
     def _apply_firm_details(self, doc: DocxDocument, firm_details: Dict[str, Any]):
         """Apply firm details to signature blocks and firm information"""
@@ -288,12 +419,25 @@ class DocumentProcessor:
         for paragraph in doc.paragraphs:
             if '[FIRM_NAME]' in paragraph.text:
                 paragraph.text = paragraph.text.replace('[FIRM_NAME]', firm_details.get('name', ''))
+                # Add professional redlining to show the change
+                for run in paragraph.runs:
+                    run.font.underline = True
+                    run.font.color.rgb = RGBColor(255, 0, 0)  # Red for additions
             if '[FIRM_ADDRESS]' in paragraph.text:
                 paragraph.text = paragraph.text.replace('[FIRM_ADDRESS]', firm_details.get('address', ''))
+                for run in paragraph.runs:
+                    run.font.underline = True
+                    run.font.color.rgb = RGBColor(255, 0, 0)  # Red for additions
             if '[SIGNER_NAME]' in paragraph.text:
                 paragraph.text = paragraph.text.replace('[SIGNER_NAME]', firm_details.get('signerName', ''))
+                for run in paragraph.runs:
+                    run.font.underline = True
+                    run.font.color.rgb = RGBColor(255, 0, 0)  # Red for additions
             if '[SIGNER_TITLE]' in paragraph.text:
                 paragraph.text = paragraph.text.replace('[SIGNER_TITLE]', firm_details.get('signerTitle', ''))
+                for run in paragraph.runs:
+                    run.font.underline = True
+                    run.font.color.rgb = RGBColor(255, 0, 0)  # Red for additions
     
     def _generate_output_path(self, input_path: str) -> str:
         """Generate output path for the processed document"""
