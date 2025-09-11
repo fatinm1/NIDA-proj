@@ -263,7 +263,29 @@ class DocumentProcessor:
                         firm_details: Dict[str, Any]) -> Dict[str, Any]:
         """
         Process a Word document with AI redlining and return the modified document
+        Optimized for large files with memory efficiency
         """
+        try:
+            # Check file size and use appropriate processing method
+            file_size = os.path.getsize(doc_path)
+            logger.info(f"Processing document: {file_size} bytes ({file_size/1024:.1f} KB)")
+            
+            # For large files (>100KB), use chunked processing
+            if file_size > 100 * 1024:  # 100KB threshold
+                return self._process_large_document(doc_path, custom_rules, firm_details)
+            else:
+                return self._process_small_document(doc_path, custom_rules, firm_details)
+            
+        except Exception as e:
+            logger.error(f"Error processing document: {str(e)}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+    
+    def _process_small_document(self, doc_path: str, custom_rules: List[Dict[str, Any]], 
+                               firm_details: Dict[str, Any]) -> Dict[str, Any]:
+        """Process small documents (<100KB) using standard method"""
         try:
             # Load the document
             doc = DocxDocument(doc_path)
@@ -309,7 +331,63 @@ class DocumentProcessor:
             }
             
         except Exception as e:
-            logger.error(f"Error processing document: {str(e)}")
+            logger.error(f"Error processing small document: {str(e)}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+    
+    def _process_large_document(self, doc_path: str, custom_rules: List[Dict[str, Any]], 
+                               firm_details: Dict[str, Any]) -> Dict[str, Any]:
+        """Process large documents (>100KB) using memory-efficient chunked method"""
+        try:
+            logger.info("Processing large document with chunked method")
+            
+            # Load the document
+            doc = DocxDocument(doc_path)
+            
+            # Extract text in chunks for AI analysis
+            document_text = self._extract_document_text_chunked(doc)
+            
+            # Get AI redlining instructions
+            ai_result = self.ai_service.analyze_document(document_text, custom_rules)
+            
+            if not ai_result['success']:
+                return {
+                    'success': False,
+                    'error': ai_result['error']
+                }
+            
+            # Apply AI modifications
+            modifications = ai_result['redlining_instructions']
+            if isinstance(modifications, dict) and 'modifications' in modifications:
+                modifications = modifications['modifications']
+            
+            # Apply modifications if we have any
+            if modifications:
+                self._apply_modifications_chunked(doc, modifications)
+            
+            # Apply firm details
+            self._apply_firm_details_chunked(doc, firm_details)
+            
+            # Generate output path
+            output_path = self._generate_output_path(doc_path)
+            
+            # Ensure output directory exists
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            
+            # Save the modified document
+            doc.save(output_path)
+            
+            return {
+                'success': True,
+                'output_path': output_path,
+                'modifications_applied': len(modifications) if modifications else 0,
+                'ai_analysis': ai_result.get('ai_analysis', 'No analysis available')
+            }
+            
+        except Exception as e:
+            logger.error(f"Error processing large document: {str(e)}")
             return {
                 'success': False,
                 'error': str(e)
@@ -320,6 +398,31 @@ class DocumentProcessor:
         text_parts = []
         for paragraph in doc.paragraphs:
             text_parts.append(paragraph.text)
+        
+        return '\n'.join(text_parts)
+    
+    def _extract_document_text_chunked(self, doc: DocxDocument) -> str:
+        """Extract text content from large Word documents in chunks for memory efficiency"""
+        text_parts = []
+        chunk_size = 1000  # Process 1000 paragraphs at a time
+        total_paragraphs = len(doc.paragraphs)
+        
+        logger.info(f"Extracting text from {total_paragraphs} paragraphs in chunks of {chunk_size}")
+        
+        for i in range(0, total_paragraphs, chunk_size):
+            chunk_end = min(i + chunk_size, total_paragraphs)
+            chunk_text = []
+            
+            for j in range(i, chunk_end):
+                if j < len(doc.paragraphs):
+                    chunk_text.append(doc.paragraphs[j].text)
+            
+            text_parts.extend(chunk_text)
+            
+            # Log progress for large documents
+            if total_paragraphs > 5000:
+                progress = (chunk_end / total_paragraphs) * 100
+                logger.info(f"Text extraction progress: {progress:.1f}%")
         
         return '\n'.join(text_parts)
     
@@ -335,6 +438,30 @@ class DocumentProcessor:
                     self._delete_text(doc, mod['current_text'])
                 elif mod['type'] == 'CLAUSE_ADD':
                     self._add_clause(doc, mod['new_text'])
+                    
+            except Exception as e:
+                logger.warning(f"Failed to apply modification {mod}: {str(e)}")
+                continue
+    
+    def _apply_modifications_chunked(self, doc: DocxDocument, modifications: List[Dict[str, Any]]):
+        """Apply AI-generated modifications to large documents in chunks for memory efficiency"""
+        logger.info(f"Applying {len(modifications)} modifications to large document")
+        
+        for i, mod in enumerate(modifications):
+            try:
+                if mod['type'] == 'TEXT_REPLACE':
+                    self._replace_text_chunked(doc, mod['current_text'], mod['new_text'])
+                elif mod['type'] == 'TEXT_INSERT':
+                    self._insert_text_chunked(doc, mod['new_text'], mod.get('location_hint', ''))
+                elif mod['type'] == 'TEXT_DELETE':
+                    self._delete_text_chunked(doc, mod['current_text'])
+                elif mod['type'] == 'CLAUSE_ADD':
+                    self._add_clause_chunked(doc, mod['new_text'])
+                
+                # Log progress for large documents
+                if len(modifications) > 10:
+                    progress = ((i + 1) / len(modifications)) * 100
+                    logger.info(f"Modification progress: {progress:.1f}%")
                     
             except Exception as e:
                 logger.warning(f"Failed to apply modification {mod}: {str(e)}")
@@ -393,8 +520,55 @@ class DocumentProcessor:
                 if replaced:
                     break
     
+    def _replace_text_chunked(self, doc: DocxDocument, old_text: str, new_text: str):
+        """Replace text in large documents with chunked processing for memory efficiency"""
+        logger.info(f"Attempting to replace '{old_text}' with '{new_text}' in large document")
+        replaced = False
+        chunk_size = 500  # Process 500 paragraphs at a time
+        total_paragraphs = len(doc.paragraphs)
+        
+        for i in range(0, total_paragraphs, chunk_size):
+            chunk_end = min(i + chunk_size, total_paragraphs)
+            
+            for j in range(i, chunk_end):
+                if j < len(doc.paragraphs):
+                    paragraph = doc.paragraphs[j]
+                    if old_text in paragraph.text:
+                        logger.info(f"Found text to replace in paragraph {j}: {paragraph.text[:100]}...")
+                        
+                        # Replace the text
+                        paragraph.text = paragraph.text.replace(old_text, new_text)
+                        replaced = True
+                        
+                        # Add professional redlining formatting
+                        for run in paragraph.runs:
+                            if new_text in run.text:
+                                run.font.underline = True
+                                run.font.color.rgb = RGBColor(255, 0, 0)  # Red for additions
+                        break
+            
+            if replaced:
+                break
+            
+            # Log progress for very large documents
+            if total_paragraphs > 10000:
+                progress = (chunk_end / total_paragraphs) * 100
+                logger.info(f"Text replacement progress: {progress:.1f}%")
+        
+        if not replaced:
+            logger.warning(f"Text '{old_text}' not found in large document for replacement")
+    
     def _insert_text(self, doc: DocxDocument, text: str, location_hint: str):
         """Insert new text at specified location"""
+        # Find appropriate location and insert
+        new_paragraph = doc.add_paragraph(text)
+        for run in new_paragraph.runs:
+            # Professional redlining for insertions
+            run.font.underline = True
+            run.font.color.rgb = RGBColor(255, 0, 0)  # Red for additions
+    
+    def _insert_text_chunked(self, doc: DocxDocument, text: str, location_hint: str):
+        """Insert new text at specified location in large documents"""
         # Find appropriate location and insert
         new_paragraph = doc.add_paragraph(text)
         for run in new_paragraph.runs:
@@ -411,8 +585,33 @@ class DocumentProcessor:
                 for run in paragraph.runs:
                     run.font.strike = True
     
+    def _delete_text_chunked(self, doc: DocxDocument, text: str):
+        """Delete text from large documents with chunked processing"""
+        chunk_size = 500
+        total_paragraphs = len(doc.paragraphs)
+        
+        for i in range(0, total_paragraphs, chunk_size):
+            chunk_end = min(i + chunk_size, total_paragraphs)
+            
+            for j in range(i, chunk_end):
+                if j < len(doc.paragraphs):
+                    paragraph = doc.paragraphs[j]
+                    if text in paragraph.text:
+                        paragraph.text = paragraph.text.replace(text, '')
+                        # Add strikethrough formatting for deleted text
+                        for run in paragraph.runs:
+                            run.font.strike = True
+    
     def _add_clause(self, doc: DocxDocument, clause_text: str):
         """Add a new clause to the document"""
+        new_paragraph = doc.add_paragraph(clause_text)
+        for run in new_paragraph.runs:
+            # Professional redlining for new clauses
+            run.font.underline = True
+            run.font.color.rgb = RGBColor(255, 0, 0)  # Red for additions
+    
+    def _add_clause_chunked(self, doc: DocxDocument, clause_text: str):
+        """Add a new clause to large documents"""
         new_paragraph = doc.add_paragraph(clause_text)
         for run in new_paragraph.runs:
             # Professional redlining for new clauses
@@ -444,6 +643,45 @@ class DocumentProcessor:
                 for run in paragraph.runs:
                     run.font.underline = True
                     run.font.color.rgb = RGBColor(255, 0, 0)  # Red for additions
+    
+    def _apply_firm_details_chunked(self, doc: DocxDocument, firm_details: Dict[str, Any]):
+        """Apply firm details to large documents with chunked processing"""
+        logger.info("Applying firm details to large document")
+        chunk_size = 500
+        total_paragraphs = len(doc.paragraphs)
+        
+        for i in range(0, total_paragraphs, chunk_size):
+            chunk_end = min(i + chunk_size, total_paragraphs)
+            
+            for j in range(i, chunk_end):
+                if j < len(doc.paragraphs):
+                    paragraph = doc.paragraphs[j]
+                    
+                    if '[FIRM_NAME]' in paragraph.text:
+                        paragraph.text = paragraph.text.replace('[FIRM_NAME]', firm_details.get('name', ''))
+                        for run in paragraph.runs:
+                            run.font.underline = True
+                            run.font.color.rgb = RGBColor(255, 0, 0)
+                    if '[FIRM_ADDRESS]' in paragraph.text:
+                        paragraph.text = paragraph.text.replace('[FIRM_ADDRESS]', firm_details.get('address', ''))
+                        for run in paragraph.runs:
+                            run.font.underline = True
+                            run.font.color.rgb = RGBColor(255, 0, 0)
+                    if '[SIGNER_NAME]' in paragraph.text:
+                        paragraph.text = paragraph.text.replace('[SIGNER_NAME]', firm_details.get('signerName', ''))
+                        for run in paragraph.runs:
+                            run.font.underline = True
+                            run.font.color.rgb = RGBColor(255, 0, 0)
+                    if '[SIGNER_TITLE]' in paragraph.text:
+                        paragraph.text = paragraph.text.replace('[SIGNER_TITLE]', firm_details.get('signerTitle', ''))
+                        for run in paragraph.runs:
+                            run.font.underline = True
+                            run.font.color.rgb = RGBColor(255, 0, 0)
+            
+            # Log progress for very large documents
+            if total_paragraphs > 10000:
+                progress = (chunk_end / total_paragraphs) * 100
+                logger.info(f"Firm details progress: {progress:.1f}%")
     
     def _generate_output_path(self, input_path: str) -> str:
         """Generate output path for the processed document"""

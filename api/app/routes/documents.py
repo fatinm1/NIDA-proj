@@ -178,6 +178,9 @@ def process_document(user, document_id):
         if file_size == 0:
             raise Exception("Document file is empty")
         
+        # Log file size for monitoring
+        logger.info(f"Processing document: {file_size} bytes ({file_size/1024:.1f} KB)")
+        
         # Validate file is a valid .docx file
         try:
             from docx import Document as DocxDocument
@@ -199,25 +202,8 @@ def process_document(user, document_id):
         # Initialize AI service
         ai_service = AIRedliningService()
         
-        # Extract text from Word document
-        try:
-            doc = DocxDocument(document.file_path)
-            document_text = '\n'.join([paragraph.text for paragraph in doc.paragraphs])
-            
-            # Validate we extracted some text
-            if not document_text.strip():
-                raise Exception("No text content found in document")
-                
-        except Exception as e:
-            # Fallback: try to read as text file
-            try:
-                with open(document.file_path, 'r', encoding='utf-8') as f:
-                    document_text = f.read()
-            except:
-                # If all else fails, create a basic text representation
-                document_text = f"Document: {document.original_filename}\nFile size: {document.file_size} bytes\nProcessing timestamp: {datetime.utcnow()}"
-        
         # Process document with AI and apply modifications
+        # The DocumentProcessor now handles large files automatically
         processor = DocumentProcessor(ai_service)
         result = processor.process_document(document.file_path, custom_rules, firm_details)
         
@@ -240,6 +226,7 @@ def process_document(user, document_id):
         })
         
     except Exception as e:
+        logger.error(f"Error processing document {document_id}: {str(e)}")
         document.status = 'error'
         document.error_message = str(e)
         db.session.commit()
@@ -292,8 +279,27 @@ def get_document(user, document_id):
     if document.user_id != user.id:
         return jsonify({'error': 'Unauthorized'}), 403
     
+    # Add processing progress information for large files
+    document_dict = document.to_dict()
+    
+    if document.status == 'processing':
+        # Estimate processing time based on file size
+        file_size_kb = document.file_size / 1024 if document.file_size else 0
+        if file_size_kb > 100:
+            document_dict['processing_info'] = {
+                'estimated_time': f"{max(30, int(file_size_kb / 10))} seconds",
+                'file_size_kb': round(file_size_kb, 1),
+                'status_message': 'Processing large document - this may take a few minutes'
+            }
+        else:
+            document_dict['processing_info'] = {
+                'estimated_time': '10-30 seconds',
+                'file_size_kb': round(file_size_kb, 1),
+                'status_message': 'Processing document'
+            }
+    
     return jsonify({
-        'document': document.to_dict()
+        'document': document_dict
     })
 
 @documents_bp.route('/<int:document_id>', methods=['DELETE'])
