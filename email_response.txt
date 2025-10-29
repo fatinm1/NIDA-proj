@@ -1,0 +1,17 @@
+Subject: Re: NDA Redlining Platform - Working on Date Flexibility & Word Track Changes
+
+Hi John,
+
+Thank you for the feedback on the NDA redlining platform. I've addressed both items and the fixes are currently deploying:
+
+1. **Flexible Date Pattern Recognition**: I've enhanced the AI prompts to support more flexible, natural language date rules (similar to ChatGPT). The system now uses pattern recognition rather than exact text matching, so rules like "anywhere in the document that has a blank date (Month __, Year) or asks for the date to be inserted, insert today's date" should now work across different NDA formats.
+
+2. **Native Word Track Changes**: I've re-implemented the Word Track Changes functionality using proper Word XML structures. The output documents will now properly register as having Track Changes in Word, allowing users to accept/reject changes directly within Word, just like a live redline.
+
+Both features should be live in production within the next hour. Once deployment completes, I'll test both functionalities and confirm they're working as expected. I'd be happy to schedule a quick test once it's live if you'd like to verify the changes.
+
+Please let me know if you have any other questions or concerns.
+
+Best regards,
+[Your Name]
+
